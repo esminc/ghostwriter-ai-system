@@ -278,25 +278,29 @@ class FullFeaturedGhostWriterBot {
             }
 
             // 🚀 MCP統合でLLMに全処理委任
-            console.log(`🤖 MCP統合処理開始: ${esaScreenName}`);
+            console.log(`🤖 MCP統合処理開始: ${esaScreenName} (${userName}の代筆)`);
             const result = await this.diaryGenerator.generateDiaryWithMCP(esaScreenName, {
                 slackUser: userInfo,
                 contextData: {
                     source: 'slack_bot_phase2a',
                     generation_time: new Date().toISOString(),
                     user_id: userId,
-                    user_name: userName
+                    user_name: userName,
+                    target_user: esaScreenName,
+                    original_slack_user: userName
                 }
             });
 
             if (result.success) {
-                // ✅ MCP統合成功 - Phase 1互換プレビュー表示（Emailマッピング情報含む）
+                // ✅ MCP統合成功 - Phase 1互換プレビュー表示（代筆対象ユーザー情報強化）
                 await respond({
-                    text: '✨ MCP統合AI代筆日記が完成しました！',
+                    text: `✨ ${esaScreenName}さんの代筆日記が完成しました！`,
                     blocks: this.getDiaryPreviewBlocks(result.diary, userId, result.metadata, mappingResult),
                     replace_original: true,
                     response_type: 'ephemeral'
                 });
+                
+                console.log(`✅ ${esaScreenName}さん（${userName}が依頼）の代筆日記生成完了`);
             } else {
                 // ❌ MCP統合失敗時のエラー表示
                 await respond({
@@ -400,9 +404,11 @@ class FullFeaturedGhostWriterBot {
                 category: diary.category || 'AI代筆日記',
                 qualityScore: diary.qualityScore || diary.confidence || 4
             }, {
-                author: userName,
+                author: userName, // 代筆対象ユーザー（esaスクリーンネーム）
                 source: 'slack_bot_phase2a',
-                user_id: userId
+                user_id: userId,
+                slack_user: userName, // 元のSlackユーザー名も記録
+                is_ghostwrite: true // 代筆であることを明示
             });
 
             if (esaResult.success) {
@@ -414,7 +420,7 @@ class FullFeaturedGhostWriterBot {
                             type: 'section',
                             text: {
                                 type: 'mrkdwn',
-                                text: `🎉 *esa投稿が完了しました！*\n\n📝 **タイトル:** ${title}\n🔗 **URL:** ${esaResult.url}\n📊 **投稿番号:** #${esaResult.number}`
+                                text: `🎉 *代筆投稿が完了しました！*\n\n📝 **タイトル:** ${title}\n👤 **代筆対象:** esa投稿で確認してください\n🔗 **URL:** ${esaResult.url}\n📊 **投稿番号:** #${esaResult.number}\n\n💡 投稿者は \`esa_bot\` ですが、タイトルに代筆対象ユーザーが明記されています。`
                             }
                         },
                         {
@@ -688,16 +694,25 @@ class FullFeaturedGhostWriterBot {
             });
         }
 
-        // Emailマッピング情報表示（Phase 1互換）
+        // 🏷️ 代筆対象ユーザー情報を明確に表示（Phase 1互換強化）
         if (mappingResult && mappingResult.success) {
             const confidencePercentage = (mappingResult.confidence * 100).toFixed(1);
-            const mappingInfo = `*📧 Emailマッピング情報:*\n方法: ${mappingResult.mappingMethod}${mappingResult.fallbackUsed ? ' (フォールバック使用)' : ''}\n信頼度: ${confidencePercentage}%\n処理時間: ${mappingResult.processingTime}ms\nマッピング: ${mappingResult.slackUser.name} → ${mappingResult.esaUser.screen_name}`;
+            const targetUserInfo = `*👤 代筆対象ユーザー:* ${mappingResult.esaUser.screen_name}\n*🔗 Slackユーザー:* ${mappingResult.slackUser.name}\n*📧 マッピング方式:* ${mappingResult.mappingMethod}${mappingResult.fallbackUsed ? ' (フォールバック使用)' : ''}\n*🎯 信頼度:* ${confidencePercentage}% | 処理時間: ${mappingResult.processingTime}ms`;
             
             blocks.push({
                 type: 'section',
                 text: {
                     type: 'mrkdwn',
-                    text: mappingInfo
+                    text: targetUserInfo
+                }
+            });
+        } else if (mappingResult) {
+            // マッピング失敗時も対象ユーザーを明確に
+            blocks.push({
+                type: 'section',
+                text: {
+                    type: 'mrkdwn',
+                    text: `*👤 代筆対象ユーザー:* フォールバック使用\n*⚠️ マッピング:* ${mappingResult.error || 'マッピング失敗'}\n*🔄 処理時間:* ${mappingResult.processingTime}ms`
                 }
             });
         }
@@ -739,8 +754,9 @@ class FullFeaturedGhostWriterBot {
             }
         );
 
-        // コンテキスト情報
-        const contextText = `🤖 MCP統合品質: ${diary.qualityScore || metadata?.quality_score || 'N/A'} | 生成時間: ${new Date().toLocaleTimeString('ja-JP')} | 📊 文字数: ${(diary.content || '').length}文字 | ⚡ Phase 2-A`;
+        // コンテキスト情報（代筆情報強化）
+        const targetUser = mappingResult?.success ? mappingResult.esaUser.screen_name : 'Unknown';
+        const contextText = `🤖 AI代筆システム | 対象: ${targetUser} | 品質: ${diary.qualityScore || metadata?.quality_score || 'N/A'}/5 | 生成: ${new Date().toLocaleTimeString('ja-JP')} | 📊 ${(diary.content || '').length}文字 | ⚡ Phase 2-A MCP統合`;
         
         blocks.push({
             type: 'context',

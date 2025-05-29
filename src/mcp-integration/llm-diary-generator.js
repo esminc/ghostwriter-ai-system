@@ -259,7 +259,7 @@ ${JSON.stringify(articlesData, null, 2)}
     }
     
     /**
-     * esa投稿データ準備
+     * esa投稿データ準備（Phase 1互換：代筆であることを明確化）
      */
     async prepareMCPEsaPost(diary, options) {
         const today = new Date();
@@ -269,13 +269,26 @@ ${JSON.stringify(articlesData, null, 2)}
         // Phase 1互換のカテゴリ設定
         const category = `AI代筆日記/${year}/${month}`;
         
+        // 代筆であることを明確にするタイトル（既に【代筆】が含まれている場合はそのまま使用）
+        let finalTitle = diary.title || `【代筆】${options.author || 'AI'}: 日記 - ${dateStr}`;
+        if (!finalTitle.includes('【代筆】')) {
+            finalTitle = `【代筆】${options.author || 'AI'}: ${finalTitle}`;
+        }
+        
+        console.log('📋 esa投稿データ準備:', {
+            finalTitle,
+            author: options.author,
+            category,
+            hasTitle: !!diary.title
+        });
+        
         return {
-            name: diary.title || `${options.author || 'AI'}の日記 - ${dateStr}`,
+            name: finalTitle,
             body_md: diary.content || diary,
             category: category,
             wip: false, // 公開状態
-            message: `🤖 Phase 2-A MCP統合版で生成 - 対象: ${options.author || 'unknown'}`,
-            user: 'esa_bot'  // Phase 1互換: 共通投稿者アカウント使用
+            message: `🤖 AI代筆システム（Phase 2-A MCP統合版）による代筆投稿\n対象ユーザー: ${options.author || 'unknown'}\n投稿者: esa_bot（代筆システム専用アカウント）`,
+            user: 'esa_bot'  // Phase 1互換: 代筆システム専用アカウント
         };
     }
     
@@ -323,25 +336,40 @@ ${JSON.stringify(articlesData, null, 2)}
     }
 
     /**
-     * 日記タイトル自動生成
+     * 日記タイトル自動生成（Phase 1互換形式：【代筆】ユーザー名: タイトル）
      */
     generateDiaryTitle(content, userName) {
-        // コンテントからキーワードを抽出してタイトル生成
-        const today = new Date().toLocaleDateString('ja-JP', {
-            month: 'numeric',
-            day: 'numeric'
-        });
+        // 【代筆】ユーザー名: タイトル の形式で生成
+        console.log('🏷️ Phase 1互換タイトル生成中...', { userName, contentLength: content?.length });
         
-        // コンテントからキーワード抽出
-        if (content.includes('TIL') || content.includes('学んだ')) {
-            return `${today} - 今日の学び`;
-        } else if (content.includes('チーム') || content.includes('ミーティング')) {
-            return `${today} - チームでの一日`;
-        } else if (content.includes('UI') || content.includes('UX')) {
-            return `${today} - UI/UXへの思い`;
-        } else {
-            return `${today} - ${userName}の日記`;
+        let baseTitle = '今日も一日お疲れ様';
+        
+        // コンテントからキーワード抽出してタイトルを決定
+        if (content) {
+            if (content.includes('TIL') || content.includes('学んだ') || content.includes('学習')) {
+                baseTitle = '新しい学びと発見の一日';
+            } else if (content.includes('チーム') || content.includes('ミーティング') || content.includes('会議')) {
+                baseTitle = 'チーム連携が充実した一日';
+            } else if (content.includes('UI') || content.includes('UX') || content.includes('デザイン')) {
+                baseTitle = 'UI/UX設計に集中した一日';
+            } else if (content.includes('実装') || content.includes('開発') || content.includes('プログラミング')) {
+                baseTitle = '開発作業が順調に進んだ一日';
+            } else if (content.includes('調査') || content.includes('研究') || content.includes('分析')) {
+                baseTitle = '調査・分析で新たな発見があった一日';
+            } else if (content.includes('API') || content.includes('データベース') || content.includes('DB')) {
+                baseTitle = '技術的な実装に取り組んだ一日';
+            } else if (content.includes('バグ') || content.includes('修正') || content.includes('デバッグ')) {
+                baseTitle = '問題解決に取り組んだ一日';
+            } else if (content.includes('タスク') || content.includes('作業')) {
+                baseTitle = 'タスク整理と日常作業の一日';
+            }
         }
+        
+        // Phase 1完全互換形式で生成
+        const phase1Title = `【代筆】${userName}: ${baseTitle}`;
+        console.log('✅ Phase 1互換タイトル生成完了:', phase1Title);
+        
+        return phase1Title;
     }
 
     /**
