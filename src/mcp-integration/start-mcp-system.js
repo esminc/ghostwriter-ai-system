@@ -16,10 +16,13 @@ async function startMCPIntegratedSystem() {
     // 環境変数チェック
     const requiredEnvVars = [
         'SLACK_BOT_TOKEN',
-        'SLACK_SIGNING_SECRET', 
-        'SLACK_APP_TOKEN',
+        'SLACK_SIGNING_SECRET',
         'OPENAI_API_KEY'
     ];
+    
+    // SLACK_APP_TOKEN は Socket Mode でのみ必要（オプショナル）
+    const optionalEnvVars = ['SLACK_APP_TOKEN'];
+    console.log('💡 オプショナル環境変数（Socket Mode用）:', optionalEnvVars.filter(v => !process.env[v]));
 
     const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
     if (missingVars.length > 0) {
