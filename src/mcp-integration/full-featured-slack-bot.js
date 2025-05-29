@@ -3,6 +3,7 @@
 
 const { App, ExpressReceiver } = require('@slack/bolt');
 const LLMDiaryGenerator = require('./llm-diary-generator');
+const MigrationManager = require('../services/migration-manager'); // Phase 1互換: Emailマッピング機能
 
 class FullFeaturedGhostWriterBot {
     constructor() {
@@ -29,10 +30,14 @@ class FullFeaturedGhostWriterBot {
         // MCP統合エンジン初期化
         this.diaryGenerator = new LLMDiaryGenerator();
         
+        // Phase 1互換: Email優先マッピング機能
+        this.migrationManager = new MigrationManager();
+        console.log('📧 Email優先マッピング機能統合完了');
+        
         // イベントハンドラー設定
         this.setupEventHandlers();
         
-        console.log('🎉 Phase 2-A フル機能版初期化完了 - MCP統合 + 完全UI');
+        console.log('🎉 Phase 2-A フル機能版初期化完了 - MCP統合 + 完全UI + Emailマッピング');
     }
 
     validateEnvironment() {
@@ -220,16 +225,56 @@ class FullFeaturedGhostWriterBot {
                 response_type: 'ephemeral'
             });
 
-            // Slackユーザー情報取得
+            // Slackユーザー情報取得とEmailマッピング
             let esaScreenName = userName;
             let userInfo = null;
+            let mappingResult = null;
             
             try {
                 const slackUserInfo = await client.users.info({ user: userId });
                 userInfo = slackUserInfo.user;
                 console.log(`👤 ユーザー情報取得: ${userInfo.real_name || userInfo.name}`);
-            } catch (userError) {
-                console.log(`⚠️ ユーザー情報取得失敗、フォールバック使用: ${userName}`);
+                
+                // 🚀 Phase 1互換: Email優先マッピング実行
+                console.log('📧 Email優先マッピング実行中...');
+                
+                // マッピングマネージャーが期待する形式でユーザー情報を渡す
+                const slackUserForMapping = {
+                    id: userInfo.id,
+                    name: userInfo.name,
+                    real_name: userInfo.real_name,
+                    profile: {
+                        email: userInfo.profile?.email
+                    }
+                };
+                
+                mappingResult = await this.migrationManager.mapUser(slackUserForMapping);
+                
+                if (mappingResult.success) {
+                    esaScreenName = mappingResult.esaUser.screen_name;
+                    console.log(`✅ Email優先マッピング成功:`, {
+                        method: mappingResult.mappingMethod,
+                        confidence: mappingResult.confidence,
+                        processingTime: mappingResult.processingTime,
+                        fallbackUsed: mappingResult.fallbackUsed,
+                        slackUser: mappingResult.slackUser.name,
+                        esaUser: mappingResult.esaUser.screen_name
+                    });
+                    
+                    if (mappingResult.fallbackUsed) {
+                        console.log(`⚠️ フォールバック使用: ${mappingResult.mappingMethod}`);
+                    }
+                } else {
+                    console.log(`⚠️ Emailマッピング失敗、最終フォールバック使用:`, {
+                        error: mappingResult.error,
+                        processingTime: mappingResult.processingTime,
+                        fallback: esaScreenName
+                    });
+                }
+                
+            } catch (userInfoError) {
+                console.log(`⚠️ Slackユーザー情報取得エラー: ${userInfoError.message}`);
+                console.log(`🔄 ユーザー名フォールバック使用: ${esaScreenName}`);
             }
 
             // 🚀 MCP統合でLLMに全処理委任
@@ -245,10 +290,10 @@ class FullFeaturedGhostWriterBot {
             });
 
             if (result.success) {
-                // ✅ MCP統合成功 - Phase 1互換プレビュー表示
+                // ✅ MCP統合成功 - Phase 1互換プレビュー表示（Emailマッピング情報含む）
                 await respond({
                     text: '✨ MCP統合AI代筆日記が完成しました！',
-                    blocks: this.getDiaryPreviewBlocks(result.diary, userId, result.metadata),
+                    blocks: this.getDiaryPreviewBlocks(result.diary, userId, result.metadata, mappingResult),
                     replace_original: true,
                     response_type: 'ephemeral'
                 });
@@ -602,9 +647,9 @@ class FullFeaturedGhostWriterBot {
     }
 
     /**
-     * 🎨 Phase 1完全互換 - 日記プレビューブロック
+     * 🎨 Phase 1完全互換 - 日記プレビューブロック（Emailマッピング情報含む）
      */
-    getDiaryPreviewBlocks(diary, userId, metadata = null) {
+    getDiaryPreviewBlocks(diary, userId, metadata = null, mappingResult = null) {
         const blocks = [
             {
                 type: 'section',
@@ -639,6 +684,20 @@ class FullFeaturedGhostWriterBot {
                 text: {
                     type: 'mrkdwn',
                     text: `*🤖 MCP統合情報:*\n処理方式: ${metadata.processing_method || 'mcp_integration'}\n品質スコア: ${metadata.quality_score || 'N/A'}/5\n使用トークン: ${metadata.tokens_used || 'N/A'}`
+                }
+            });
+        }
+
+        // Emailマッピング情報表示（Phase 1互換）
+        if (mappingResult && mappingResult.success) {
+            const confidencePercentage = (mappingResult.confidence * 100).toFixed(1);
+            const mappingInfo = `*📧 Emailマッピング情報:*\n方法: ${mappingResult.mappingMethod}${mappingResult.fallbackUsed ? ' (フォールバック使用)' : ''}\n信頼度: ${confidencePercentage}%\n処理時間: ${mappingResult.processingTime}ms\nマッピング: ${mappingResult.slackUser.name} → ${mappingResult.esaUser.screen_name}`;
+            
+            blocks.push({
+                type: 'section',
+                text: {
+                    type: 'mrkdwn',
+                    text: mappingInfo
                 }
             });
         }
