@@ -1,0 +1,65 @@
+{
+  "name": "ghostwriter-esa-diary",
+  "version": "0.1.0",
+  "description": "AI-powered Slack Bot for automated esa diary generation",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "slack": "node src/slack-bot.js",
+    "slack:dev": "nodemon src/slack-bot.js",
+    "test": "node src/index.js",
+    "test:db": "node src/index.js",
+    "test:esa": "node src/test-esa-api.js",
+    "test:post": "node src/test-real-post.js",
+    "test:ai": "node src/test-ai-integration.js",
+    "test:slack": "node src/test-slack-bot.js",
+    "test:connection": "node test-esa-connection.js",
+    "test:quick": "node quick-test.js",
+    "test:user": "node test-user-normalization.js",
+    "test:improved": "node test-improved-user-search.js",
+    "test:mapping": "node test-user-mapping.js",
+    "test:auto-mapping": "node test-auto-mapping.js",
+    "mcp:test": "node src/mcp-integration/test-mcp-system.js",
+    "mcp:start": "node src/mcp-integration/start-mcp-system.js",
+    "mcp:dev": "nodemon src/mcp-integration/start-mcp-system.js",
+    "mcp:phase2b": "node src/mcp-integration/phase2b-test.js",
+    "reset:db": "node src/reset-database.js",
+    "dev": "nodemon src/index.js",
+    "test:watch": "jest --watch",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix"
+  },
+  "keywords": [
+    "slack-bot",
+    "esa",
+    "diary",
+    "ai",
+    "automation",
+    "mcp"
+  ],
+  "author": "ESM ITS Team",
+  "license": "UNLICENSED",
+  "private": true,
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@slack/bolt": "^3.17.1",
+    "googleapis": "^129.0.0",
+    "sqlite3": "^5.1.6",
+    "axios": "^1.6.0",
+    "dotenv": "^16.3.1",
+    "openai": "^4.20.1",
+    "express": "^4.18.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2",
+    "jest": "^29.7.0",
+    "eslint": "^8.55.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/esm-its/ghostwriter.git"
+  },
+  "homepage": "https://github.com/esm-its/ghostwriter#readme"
+}
