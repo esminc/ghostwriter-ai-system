@@ -301,6 +301,23 @@ class FullFeaturedGhostWriterBot {
                 });
                 
                 console.log(`✅ ${esaScreenName}さん（${userName}が依頼）の代筆日記生成完了`);
+            } else if (result.fallback_diary) {
+                // ⚠️ MCP統合エラー時のPhase 1互換フォールバック表示
+                await respond({
+                    text: `⚠️ MCP統合エラーが発生、フォールバック日記を生成しました`,
+                    blocks: this.getDiaryPreviewBlocks(result.fallback_diary, userId, 
+                        { 
+                            processing_method: 'emergency_fallback',
+                            quality_score: 2,
+                            error_info: result.error
+                        }, 
+                        mappingResult
+                    ),
+                    replace_original: true,
+                    response_type: 'ephemeral'
+                });
+                
+                console.log(`⚠️ ${esaScreenName}さんのフォールバック日記生成完了:`, result.error);
             } else {
                 // ❌ MCP統合失敗時のエラー表示
                 await respond({

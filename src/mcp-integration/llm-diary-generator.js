@@ -10,6 +10,100 @@ class LLMDiaryGenerator {
     }
 
     /**
+     * 緊急フォールバック日記生成（Phase 1互換）
+     */
+    generateEmergencyFallback(userName) {
+        const content = `## やることやったこと
+
+- [x] 今日も一日お疲れ様でした
+- [x] 様々なタスクに取り組みました
+- [x] チームとの連携も順調でした
+
+## TIL
+
+- 日々の積み重ねが大切であることを実感
+- 効率的な作業の進め方を発見
+- チームワークの重要性を再認識
+
+## こんな気分
+
+着実に進めることができた一日でした。明日も引き続き頑張っていきましょう！💪`;
+        
+        return content;
+    }
+
+    /**
+     * Phase 1互換フッター情報を追加（AI統合システム情報）
+     */
+    addPhase1CompatibleFooter(content, userName, metadata = {}) {
+        const {
+            aiGenerated = true,
+            analysisQuality = 5,
+            generationQuality = 4,
+            referencedPosts = [],
+            systemVersion = 'v2.0.0 (Phase 2-A MCP統合版)',
+            generatedAt,
+            tokens_used = 0
+        } = metadata;
+
+        // 日本語形式の日時を生成
+        const today = new Date();
+        const dateTimeStr = today.toLocaleString('ja-JP', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+        });
+
+        // Phase 1完全互換のAI統合システム情報セクション
+        let aiInfoSection = `\n\n---\n\n**🤖 AI統合システム情報**\n`;
+        aiInfoSection += `* **生成日時**: ${dateTimeStr}\n`;
+        aiInfoSection += `* **AI分析使用**: ${analysisQuality > 0 ? 'はい' : 'いいえ'}\n`;
+        aiInfoSection += `* **AI生成使用**: ${aiGenerated ? 'はい' : 'いいえ'}\n`;
+        
+        if (analysisQuality > 0) {
+            aiInfoSection += `* **分析品質**: ${analysisQuality}/5\n`;
+        }
+        
+        if (aiGenerated) {
+            aiInfoSection += `* **生成品質**: ${generationQuality}/5\n`;
+        }
+        
+        // 参照した投稿情報を追加
+        if (referencedPosts && referencedPosts.length > 0) {
+            aiInfoSection += `* **参照投稿**: `;
+            const postLinks = referencedPosts.map((post, index) => {
+                if (typeof post === 'object' && post.title) {
+                    return `[過去記事${index + 1}: ${post.title.substring(0, 20)}...]`;
+                }
+                return `過去記事${index + 1}`;
+            });
+            aiInfoSection += postLinks.slice(0, 3).join(', ') + '\n';
+        }
+        
+        aiInfoSection += `* **対象ユーザー**: ${userName}\n`;
+        aiInfoSection += `* **投稿者**: esa_bot (代筆システム)\n`;
+        aiInfoSection += `* **システム**: 代筆さん ${systemVersion} (${aiGenerated ? 'AI統合版' : 'フォールバック版'})\n`;
+        
+        // MCP統合版独自の情報追加
+        if (tokens_used > 0) {
+            aiInfoSection += `* **使用トークン**: ${tokens_used.toLocaleString()}トークン\n`;
+        }
+        aiInfoSection += `* **MCP統合**: 有効 (Phase 2-A)\n`;
+        
+        // 生成方法の説明（Phase 1互換）
+        if (aiGenerated) {
+            aiInfoSection += `\nこの投稿はAI統合システムによって自動生成されました。OpenAI GPT-4o-miniを使用してプロフィール分析に基づく個人化された日記を生成しています。MCP(Model Context Protocol)統合により、さらに高効率で高品質な処理を実現しています。`;
+        } else {
+            aiInfoSection += `\nこの投稿はAI統合システムのフォールバック機能によって生成されました。AI APIが利用できない場合でも、従来のテンプレートベース生成で品質を保持しています。`;
+        }
+        
+        return content + aiInfoSection;
+    }
+
+    /**
      * MCP統合による簡素化された日記生成フロー
      * 1. LLMがesa MCP Serverに記事検索指示
      * 2. LLMが文体分析
@@ -59,7 +153,24 @@ class LLMDiaryGenerator {
             return {
                 success: false,
                 error: error.message,
-                fallback_required: true
+                fallback_required: true,
+                // フォールバック時もPhase 1互換フッターを追加
+                fallback_diary: {
+                    title: `【代筆】${userName}: システムエラー時のフォールバック`,
+                    content: this.addPhase1CompatibleFooter(
+                        this.generateEmergencyFallback(userName),
+                        userName,
+                        {
+                            aiGenerated: false,
+                            analysisQuality: 0,
+                            generationQuality: 2,
+                            systemVersion: 'v2.0.0 (Phase 2-A エラーフォールバック)',
+                            generatedAt: new Date().toISOString()
+                        }
+                    ),
+                    category: 'AI代筆日記',
+                    qualityScore: 2
+                }
             };
         }
     }
@@ -142,7 +253,19 @@ class LLMDiaryGenerator {
         return {
             diary: {
                 title: this.generateDiaryTitle(generatedContent.diary || analysisResult.content, userName),
-                content: generatedContent.diary || analysisResult.content,
+                content: this.addPhase1CompatibleFooter(
+                    generatedContent.diary || analysisResult.content, 
+                    userName, 
+                    {
+                        aiGenerated: true,
+                        analysisQuality: 5,
+                        generationQuality: generatedContent.confidence || 4,
+                        referencedPosts: articlesData.recent_articles || [],
+                        systemVersion: 'v2.0.0 (Phase 2-A MCP統合版)',
+                        generatedAt: new Date().toISOString(),
+                        tokens_used: analysisResult.usage?.total_tokens || 0
+                    }
+                ),
                 category: 'AI代筆日記',
                 qualityScore: generatedContent.confidence || 4
             },
