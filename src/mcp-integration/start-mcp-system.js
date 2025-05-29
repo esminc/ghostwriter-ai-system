@@ -3,7 +3,7 @@
 
 require('dotenv').config();
 
-const SimplifiedGhostWriterBot = require('./simplified-slack-bot');
+const FullFeaturedGhostWriterBot = require('./full-featured-slack-bot');
 
 /**
  * MCP統合版システム起動
@@ -42,7 +42,7 @@ async function startMCPIntegratedSystem() {
 
     try {
         // MCP統合版Bot起動
-        const bot = new SimplifiedGhostWriterBot();
+        const bot = new FullFeaturedGhostWriterBot();
         await bot.start();
 
         console.log('\n🎊 MCP統合版システム起動完了！');
