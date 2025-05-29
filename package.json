@@ -4,7 +4,8 @@
   "description": "AI-powered Slack Bot for automated esa diary generation",
   "main": "src/index.js",
   "scripts": {
-    "start": "node src/index.js",
+    "start": "node src/mcp-integration/start-mcp-system.js",
+    "start:phase1": "node src/index.js",
     "slack": "node src/slack-bot.js",
     "slack:dev": "nodemon src/slack-bot.js",
     "test": "node src/index.js",
@@ -24,7 +25,8 @@
     "mcp:dev": "nodemon src/mcp-integration/start-mcp-system.js",
     "mcp:phase2b": "node src/mcp-integration/phase2b-test.js",
     "reset:db": "node src/reset-database.js",
-    "dev": "nodemon src/index.js",
+    "dev": "nodemon src/mcp-integration/start-mcp-system.js",
+    "dev:phase1": "nodemon src/index.js",
     "test:watch": "jest --watch",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix"
