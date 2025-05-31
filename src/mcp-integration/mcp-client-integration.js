@@ -192,6 +192,47 @@ class MCPClientIntegration {
     }
     
     /**
+     * 🔧 Slack MCPレスポンス解析（100%完成版）
+     */
+    parseSlackMCPResponse(result) {
+        try {
+            // MCP レスポンスの構造を解析
+            if (result && result.content) {
+                // コンテンツが配列の場合（通常のMCPレスポンス）
+                if (Array.isArray(result.content)) {
+                    if (result.content.length > 0 && result.content[0].text) {
+                        // テキストコンテンツをJSONとして解析
+                        const jsonStr = result.content[0].text;
+                        console.log('✅ MCPレスポンスJSON解析成功');
+                        return JSON.parse(jsonStr);
+                    }
+                }
+                // 直接オブジェクトの場合
+                else if (typeof result.content === 'object') {
+                    return result.content;
+                }
+                // 文字列の場合
+                else if (typeof result.content === 'string') {
+                    return JSON.parse(result.content);
+                }
+            }
+            
+            // 直接結果がJSONオブジェクトの場合
+            if (result && typeof result === 'object' && !result.content) {
+                return result;
+            }
+            
+            console.warn('⚠️ MCPレスポンス解析失敗: 予期しない構造', result);
+            return null;
+            
+        } catch (error) {
+            console.error('❌ MCP JSONレスポンス解析エラー:', error.message);
+            console.log('🔍 レスポンス構造:', typeof result, result);
+            return null;
+        }
+    }
+
+    /**
      * 💬 実際のSlackデータ取得（真のMCP統合）
      */
     async getSlackData(userName, options = {}) {
@@ -214,10 +255,19 @@ class MCPClientIntegration {
                 arguments: {}
             });
             
+            // 🚀 100%完成：JSON文字列レスポンスを正しく解析
+            const usersData = this.parseSlackMCPResponse(usersResult);
+            if (!usersData || !usersData.members) {
+                console.log('⚠️ ユーザー一覧の取得に失敗');
+                return this.getSlackFallbackData(userName, 'Failed to get users list');
+            }
+            
             // ユーザー検索
-            const targetUser = this.findUserByName(usersResult.content, userName);
+            const targetUser = this.findUserByName(usersData.members, userName);
             if (!targetUser) {
                 console.warn(`⚠️ ユーザー "${userName}" が見つかりません`);
+                // 利用可能なユーザー一覧をログ出力
+                console.log('📋 利用可能なユーザー:', usersData.members.slice(0, 5).map(u => u.name).join(', '));
                 return this.getSlackFallbackData(userName, 'User not found');
             }
             
@@ -230,9 +280,13 @@ class MCPClientIntegration {
                 arguments: {}
             });
             
+            // 🚀 100%完成：チャンネルデータも正しく解析
+            const channelsData = this.parseSlackMCPResponse(channelsResult);
+            const channels = channelsData?.channels || [];
+            
             // Step 3: 今日のメッセージ収集
             const todayMessages = await this.collectTodayMessages(
-                channelsResult.content, 
+                channels, 
                 targetUser.id
             );
             
@@ -246,7 +300,7 @@ class MCPClientIntegration {
                 user_name: userName,
                 slack_user_id: targetUser.id,
                 dataSource: 'real_slack_mcp',
-                channels_accessed: channelsResult.content.length,
+                channels_accessed: channels.length,
                 todayMessages: todayMessages,
                 messageStats: messageStats,
                 activityAnalysis: activityAnalysis,
@@ -303,8 +357,12 @@ class MCPClientIntegration {
                     }
                 });
                 
-                if (historyResult.content && Array.isArray(historyResult.content)) {
-                    const userMessages = historyResult.content.filter(msg => 
+                // 🚀 100%完成：チャンネル履歴データも正しく解析
+                const historyData = this.parseSlackMCPResponse(historyResult);
+                const messages = historyData?.messages || [];
+                
+                if (Array.isArray(messages)) {
+                    const userMessages = messages.filter(msg => 
                         msg.user === userId && 
                         msg.type === 'message' &&
                         !msg.subtype // 通常のメッセージのみ
