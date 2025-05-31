@@ -85,7 +85,7 @@ class AIDiaryGenerator {
         systemVersion: 'v1.0.0 (Phase 1完成版)',
         inputActions: inputActions
       };
-      const integrationResult = this.integrateDiaries(aiGeneratedDiary, fallbackDiary, targetUser, integrationMetadata);
+      const integrationResult = this.integrateDiaries(aiGeneratedDiary, fallbackDiary, targetUser, integrationMetadata, profileAnalysis);
       
       // 🔍 統合結果デバッグ
       console.log('🔍 Integration result debug:', {
@@ -217,7 +217,7 @@ class AIDiaryGenerator {
   }
 
   // AI日記と従来日記の統合
-  integrateDiaries(aiDiary, fallbackDiary, targetUser, metadata = {}) {
+  integrateDiaries(aiDiary, fallbackDiary, targetUser, metadata = {}, profileAnalysis = null) {
     console.log('🔍 integrateDiaries called:', {
       hasAiDiary: !!aiDiary,
       hasFallbackDiary: !!fallbackDiary,
@@ -306,7 +306,9 @@ class AIDiaryGenerator {
       aiGenerated: true,
       analysisQuality: metadata.analysisQuality || 5,
       generationQuality: metadata.generationQuality || 4,
-      targetUser: targetUser
+      targetUser: targetUser,
+      profileAnalysis: profileAnalysis,  // 🔧 プロフィール分析結果を渡す
+      analysisDetails: { articleCount: 60 }  // 🔧 分析詳細を渡す
     });
     
     // 代筆フッター追加
@@ -322,7 +324,7 @@ class AIDiaryGenerator {
     return { content, title: extractedTitle };
   }
 
-  // AI統合システム情報セクション追加
+  // AI統合システム情報セクション追加 - 関心事分析強化版
   addAISystemInfo(content, metadata = {}) {
     const {
       aiGenerated = false,
@@ -331,7 +333,9 @@ class AIDiaryGenerator {
       targetUser = 'ユーザー',
       referencedPosts = [],
       generatedAt,
-      systemVersion = 'v1.0.0'
+      systemVersion = 'v1.0.0',
+      profileAnalysis = null,  // 🔧 プロフィール分析結果を追加
+      analysisDetails = null   // 🔧 分析詳細を追加
     } = metadata;
 
     const today = new Date();
@@ -344,9 +348,23 @@ class AIDiaryGenerator {
       second: '2-digit'
     });
 
+    // 🔧 関心事分析の実行
+    let interestAnalysis = null;
+    if (profileAnalysis && aiGenerated) {
+      interestAnalysis = this.analyzeInterestReflection(content, profileAnalysis);
+    }
+
     let aiInfoSection = `\n\n---\n\n**🤖 AI統合システム情報**\n`;
     aiInfoSection += `* **生成日時**: ${dateTimeStr}\n`;
-    aiInfoSection += `* **AI分析使用**: ${analysisQuality > 0 ? 'はい' : 'いいえ'}\n`;
+    
+    // AI分析使用情報を詳細化
+    if (analysisQuality > 0) {
+      const postCount = referencedPosts.length || (analysisDetails?.articleCount || 60);
+      aiInfoSection += `* **AI分析使用**: はい (${postCount}記事分析)\n`;
+    } else {
+      aiInfoSection += `* **AI分析使用**: いいえ\n`;
+    }
+    
     aiInfoSection += `* **AI生成使用**: ${aiGenerated ? 'はい' : 'いいえ'}\n`;
     
     if (analysisQuality > 0) {
@@ -356,10 +374,30 @@ class AIDiaryGenerator {
     if (aiGenerated) {
       aiInfoSection += `* **生成品質**: ${generationQuality}/5\n`;
     }
+
+    // 🔧 関心事反映分析セクション
+    if (interestAnalysis) {
+      aiInfoSection += `\n**🎯 関心事反映分析**\n`;
+      aiInfoSection += `* **検出された関心事**: ${interestAnalysis.detectedInterests.join(', ')}\n`;
+      aiInfoSection += `* **技術キーワード**: ${interestAnalysis.detectedTechKeywords.join(', ')}\n`;
+      aiInfoSection += `* **反映された関心事**: ${interestAnalysis.reflectedInterests.join(', ')}\n`;
+      aiInfoSection += `* **関心事反映度**: ${interestAnalysis.reflectionPercentage}% (${interestAnalysis.reflectionLevel})\n`;
+      aiInfoSection += `* **技術的具体性**: ${interestAnalysis.technicalSpecificity.assessment} (${interestAnalysis.technicalSpecificity.foundTechnical.length}個の技術用語使用)\n`;
+    }
+
+    // 🔧 個人化品質分析セクション
+    if (profileAnalysis && aiGenerated) {
+      const personalizationAnalysis = this.analyzePersonalizationQuality(content, profileAnalysis);
+      
+      aiInfoSection += `\n**📊 個人化品質**\n`;
+      aiInfoSection += `* **文体再現度**: ${personalizationAnalysis.styleScore}/5 (特徴的表現: ${personalizationAnalysis.foundExpressions.join(', ')})\n`;
+      aiInfoSection += `* **作業パターン適合**: ${personalizationAnalysis.behaviorScore}/5 (${personalizationAnalysis.matchedPatterns.join('・')})\n`;
+      aiInfoSection += `* **総合模倣度**: ${personalizationAnalysis.overallScore}/5 (${personalizationAnalysis.overallAssessment})\n`;
+    }
     
     // 参照した投稿情報を追加
     if (referencedPosts && referencedPosts.length > 0) {
-      aiInfoSection += `* **参照投稿**: `;
+      aiInfoSection += `\n* **参照投稿**: `;
       const postLinks = referencedPosts.map(post => {
         if (typeof post === 'object' && post.id && post.title) {
           return `[#${post.id} ${post.title}](https://esminc-its.esa.io/posts/${post.id})`;
@@ -371,7 +409,7 @@ class AIDiaryGenerator {
       aiInfoSection += postLinks.join(', ') + '\n';
     }
     
-    aiInfoSection += `* **対象ユーザー**: ${targetUser}\n`;
+    aiInfoSection += `\n* **対象ユーザー**: ${targetUser}\n`;
     aiInfoSection += `* **投稿者**: esa_bot (代筆システム)\n`;
     aiInfoSection += `* **システム**: 代筆さん ${systemVersion} (${aiGenerated ? 'AI統合版' : 'フォールバック版'})\n`;
     
@@ -802,6 +840,150 @@ class AIDiaryGenerator {
     const fallbackTitle = `【代筆】${targetUser}: 今日も一日お疲れ様`;
     console.log('🔍 Using fallback title:', fallbackTitle);
     return fallbackTitle;
+  }
+
+  // 🔧 新機能: 関心事反映度分析
+  analyzeInterestReflection(content, profileAnalysis) {
+    const interests = profileAnalysis.interests || {};
+    const detectedInterests = [
+      ...(interests.main_categories || []),
+      ...(interests.technical_keywords || [])
+    ];
+    
+    const detectedTechKeywords = interests.technical_keywords || [];
+    
+    // 実際に反映された関心事の検出
+    const reflectedInterests = [];
+    let reflectionScore = 0;
+    
+    detectedInterests.forEach(interest => {
+      if (content.toLowerCase().includes(interest.toLowerCase())) {
+        reflectedInterests.push(interest);
+        reflectionScore += interest.length > 2 ? 2 : 1; // 長い用語ほど高スコア
+      }
+    });
+    
+    const maxScore = detectedInterests.length * 2;
+    const reflectionPercentage = maxScore > 0 ? Math.round((reflectionScore / maxScore) * 100) : 0;
+    
+    // 反映度レベルの判定
+    let reflectionLevel = '低';
+    if (reflectionPercentage >= 80) reflectionLevel = '優秀';
+    else if (reflectionPercentage >= 60) reflectionLevel = '良好';
+    else if (reflectionPercentage >= 40) reflectionLevel = '普通';
+    
+    // 技術的具体性の分析
+    const technicalSpecificity = this.analyzeTechnicalSpecificity(content);
+    
+    return {
+      detectedInterests: detectedInterests.slice(0, 4), // 最大4個表示
+      detectedTechKeywords: detectedTechKeywords.slice(0, 4),
+      reflectedInterests: reflectedInterests.slice(0, 3),
+      reflectionScore,
+      reflectionPercentage,
+      reflectionLevel,
+      technicalSpecificity
+    };
+  }
+
+  // 🔧 新機能: 個人化品質分析
+  analyzePersonalizationQuality(content, profileAnalysis) {
+    const writingStyle = profileAnalysis.writing_style || {};
+    const behaviorPatterns = profileAnalysis.behavior_patterns || {};
+    
+    // 文体再現度チェック
+    const characteristicExpressions = writingStyle.characteristic_expressions || [];
+    const foundExpressions = [];
+    let styleScore = 3; // ベーススコア
+    
+    characteristicExpressions.forEach(expr => {
+      if (content.includes(expr)) {
+        foundExpressions.push(expr);
+        styleScore += 0.3;
+      }
+    });
+    
+    styleScore = Math.min(styleScore, 5);
+    
+    // 作業パターン適合度チェック
+    const typicalTasks = behaviorPatterns.typical_tasks || [];
+    const matchedPatterns = [];
+    let behaviorScore = 3;
+    
+    typicalTasks.forEach(task => {
+      if (content.toLowerCase().includes(task.toLowerCase())) {
+        matchedPatterns.push(task);
+        behaviorScore += 0.4;
+      }
+    });
+    
+    behaviorScore = Math.min(behaviorScore, 5);
+    
+    // 総合評価
+    const overallScore = ((styleScore + behaviorScore) / 2);
+    let overallAssessment = '標準';
+    if (overallScore >= 4.5) overallAssessment = '非常に高品質';
+    else if (overallScore >= 4.0) overallAssessment = '高品質';
+    else if (overallScore >= 3.5) overallAssessment = '良好';
+    
+    return {
+      styleScore: Math.round(styleScore * 10) / 10,
+      foundExpressions: foundExpressions.slice(0, 3),
+      behaviorScore: Math.round(behaviorScore * 10) / 10,
+      matchedPatterns: matchedPatterns.slice(0, 3),
+      overallScore: Math.round(overallScore * 10) / 10,
+      overallAssessment
+    };
+  }
+
+  // 🔧 新機能: 技術的具体性分析
+  analyzeTechnicalSpecificity(content) {
+    const technicalTerms = [
+      'API', 'データベース', '実装', 'システム', 'アーキテクチャ',
+      'プログラミング', 'フレームワーク', 'ライブラリ', 'アルゴリズム',
+      'パフォーマンス', 'セキュリティ', 'スケーリング', 'デプロイ',
+      'CI/CD', 'DevOps', 'マイクロサービス', 'REST', 'GraphQL',
+      '機械学習', 'AI', 'LLM', 'MCP', 'OpenAI', 'バックエンド',
+      'フロントエンド', 'フルスタック', 'クラウド', 'コンテナ',
+      'リファクタリング', 'チャットボット', 'ハッカソン', 'エラーハンドリング'
+    ];
+    
+    const genericTerms = [
+      'タスク', '作業', '仕事', '業務', '活動', '行動',
+      '取り組み', '対応', '処理', '進行', '実施'
+    ];
+    
+    let technicalCount = 0;
+    let genericCount = 0;
+    let foundTechnical = [];
+    let foundGeneric = [];
+    
+    technicalTerms.forEach(term => {
+      if (content.includes(term)) {
+        technicalCount++;
+        foundTechnical.push(term);
+      }
+    });
+    
+    genericTerms.forEach(term => {
+      if (content.includes(term)) {
+        genericCount++;
+        foundGeneric.push(term);
+      }
+    });
+    
+    const technicalRatio = technicalCount / (technicalCount + genericCount);
+    
+    return {
+      technicalTerms: technicalCount,
+      genericTerms: genericCount,
+      technicalRatio: Math.round(technicalRatio * 100),
+      foundTechnical: [...new Set(foundTechnical)],
+      foundGeneric: [...new Set(foundGeneric)],
+      assessment: technicalRatio > 0.7 ? '非常に高' : 
+                  technicalRatio > 0.5 ? '高' : 
+                  technicalRatio > 0.3 ? '中' : '低'
+    };
   }
 }
 

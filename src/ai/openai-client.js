@@ -4,7 +4,7 @@ class OpenAIClient {
   constructor() {
     this.apiKey = process.env.OPENAI_API_KEY;
     this.baseURL = 'https://api.openai.com/v1';
-    this.defaultModel = 'gpt-4o-mini'; // コスト効率と長いコンテキスト
+    this.defaultModel = 'gpt-4o-mini';
     
     console.log('🔍 OpenAI Client初期化デバッグ:');
     console.log(`   API Key存在: ${this.apiKey ? 'あり' : 'なし'}`);
@@ -20,7 +20,228 @@ class OpenAIClient {
     }
   }
 
-  // メインのチャット完了API呼び出し
+  // 日記生成専用のAPI呼び出し - 関心事反映強化版
+  async generateDiary(targetUser, actions, profileAnalysis, contextData = {}) {
+    // 🔧 改善1: プロフィール分析結果から具体的な関心事を抽出
+    const interests = this.extractDetailedInterests(profileAnalysis);
+    const techKeywords = this.extractTechnicalKeywords(profileAnalysis);
+    const workPatterns = this.extractWorkPatterns(profileAnalysis);
+    
+    console.log('🎯 関心事抽出結果:', {
+      interests: interests,
+      techKeywords: techKeywords,
+      workPatterns: workPatterns
+    });
+
+    // 🔧 改善2: 関心事に基づく具体的なシステムプロンプト
+    const systemPrompt = `あなたは${targetUser}さんの代筆を行う専門システムです。
+${targetUser}さんの文体的特徴と関心領域を完全に再現し、技術的で具体性のある日記を生成してください。
+
+## ${targetUser}さんの特徴分析結果
+
+### 文体特徴
+- 語調: ${profileAnalysis.writing_style?.primary_tone || 'casual'}
+- 特徴的表現: ${profileAnalysis.writing_style?.characteristic_expressions?.join(', ') || '一般的な表現'}
+- 感情表現: ${profileAnalysis.writing_style?.emotion_style || '標準的'}
+
+### 技術的関心領域（必ず反映）
+- **主要関心事**: ${interests.join(', ')}
+- **技術キーワード**: ${techKeywords.join(', ')}
+- **典型的な作業**: ${workPatterns.join(', ')}
+
+### 生成における重要な指針
+1. **技術的具体性**: 抽象的な「タスク」ではなく、具体的な技術作業を記述
+2. **関心事の反映**: ${interests.join('、')}に関連する内容を必ず含める
+3. **専門用語の活用**: ${techKeywords.join('、')}などの技術用語を自然に使用
+4. **学習・発見の描写**: 技術的な学びや発見を具体的に記述
+
+**絶対的な生成ルール（厳守）**：
+1. 出力の1行目は必ず「タイトル: 【代筆】${targetUser}: [技術的内容を含む具体的なタイトル]」
+2. 2行目は空行
+3. 3行目から日記本文開始
+4. ${targetUser}さんらしい文体で書く
+5. 以下の構成で書く：
+   ## やることやったこと
+   ## TIL  
+   ## こんな気分
+
+**技術的内容の例（必ず参考にする）**：
+- 「${techKeywords[0] || 'API'}の実装作業」
+- 「${interests[0] || 'バックエンド'}システムの改善」
+- 「${techKeywords[1] || 'データベース'}のパフォーマンス調査」
+- 「${interests[1] || 'AI'}関連の新しい技術調査」
+
+**出力テンプレート（必ず従ってください）**：
+タイトル: 【代筆】${targetUser}: [技術的内容を含む具体的なタイトル]
+
+## やることやったこと
+[具体的な技術作業、${interests.join('・')}に関連する内容を含む]
+
+## TIL
+[技術的な学び、${techKeywords.join('・')}に関する発見]
+
+## こんな気分
+[技術作業への感想、達成感や課題意識を含む]`;
+
+    // 🔧 改善3: アクションが不明な場合の関心事ベース生成
+    const enhancedActionsText = this.generateContextAwareActions(actions, interests, techKeywords, workPatterns);
+    
+    const userPrompt = `今日の${targetUser}さんの行動（関心事に基づいて拡張）：
+${enhancedActionsText}
+
+**重要**: ${targetUser}さんの主要関心事（${interests.join('、')}）を必ず反映し、技術的に具体的な内容を生成してください。
+
+${contextData.additional_context ? `追加コンテキスト：\n${contextData.additional_context}` : ''}
+
+**出力の1行目は必ず「タイトル: 【代筆】${targetUser}: [技術的内容を含む具体的なタイトル]」から始めてください。**
+
+例：
+タイトル: 【代筆】${targetUser}: ${this.generateExampleTitle(interests, techKeywords)}
+
+この形式を厳守し、技術的関心事を具体的に反映してください。`;
+
+    return this.chatCompletion([
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt }
+    ], {
+      model: 'gpt-4o-mini',
+      temperature: 0.7, // 創造性を少し高めて具体性を向上
+      maxTokens: 1200
+    });
+  }
+
+  // 🔧 新機能: 詳細な関心事抽出
+  extractDetailedInterests(profileAnalysis) {
+    const interests = [];
+    
+    // プロフィール分析からの抽出
+    if (profileAnalysis.interests?.main_categories) {
+      interests.push(...profileAnalysis.interests.main_categories);
+    }
+    
+    if (profileAnalysis.interests?.technical_keywords) {
+      interests.push(...profileAnalysis.interests.technical_keywords);
+    }
+    
+    // 行動パターンからの推定
+    if (profileAnalysis.behavior_patterns?.typical_tasks) {
+      const tasks = profileAnalysis.behavior_patterns.typical_tasks;
+      if (tasks.some(task => task.includes('API'))) interests.push('API開発');
+      if (tasks.some(task => task.includes('DB') || task.includes('データベース'))) interests.push('データベース設計');
+      if (tasks.some(task => task.includes('AI') || task.includes('機械学習'))) interests.push('AI・機械学習');
+      if (tasks.some(task => task.includes('実装'))) interests.push('ソフトウェア実装');
+    }
+    
+    // デフォルト値（空の場合）
+    if (interests.length === 0) {
+      interests.push('ソフトウェア開発', '技術調査', 'システム改善');
+    }
+    
+    return [...new Set(interests)].slice(0, 3); // 重複除去、最大3つ
+  }
+
+  // 🔧 新機能: 技術キーワード抽出
+  extractTechnicalKeywords(profileAnalysis) {
+    const keywords = [];
+    
+    if (profileAnalysis.interests?.technical_keywords) {
+      keywords.push(...profileAnalysis.interests.technical_keywords);
+    }
+    
+    if (profileAnalysis.interests?.main_categories) {
+      profileAnalysis.interests.main_categories.forEach(category => {
+        if (category.toLowerCase().includes('backend')) keywords.push('バックエンド', 'API', 'データベース');
+        if (category.toLowerCase().includes('ai')) keywords.push('AI', '機械学習', 'LLM');
+        if (category.toLowerCase().includes('frontend')) keywords.push('フロントエンド', 'UI', 'React');
+        if (category.toLowerCase().includes('devops')) keywords.push('DevOps', 'CI/CD', 'インフラ');
+      });
+    }
+    
+    // デフォルト値
+    if (keywords.length === 0) {
+      keywords.push('API', 'データベース', 'システム設計', 'プログラミング');
+    }
+    
+    return [...new Set(keywords)].slice(0, 4); // 重複除去、最大4つ
+  }
+
+  // 🔧 新機能: 作業パターン抽出
+  extractWorkPatterns(profileAnalysis) {
+    const patterns = [];
+    
+    if (profileAnalysis.behavior_patterns?.typical_tasks) {
+      patterns.push(...profileAnalysis.behavior_patterns.typical_tasks);
+    }
+    
+    // 作業スタイルからの推定
+    if (profileAnalysis.behavior_patterns?.work_style) {
+      const workStyle = profileAnalysis.behavior_patterns.work_style;
+      if (workStyle.includes('実装')) patterns.push('コード実装', '機能開発');
+      if (workStyle.includes('設計')) patterns.push('システム設計', 'アーキテクチャ検討');
+      if (workStyle.includes('調査')) patterns.push('技術調査', '情報収集');
+    }
+    
+    // デフォルト値
+    if (patterns.length === 0) {
+      patterns.push('コード実装', '技術調査', 'システム改善', 'チーム連携');
+    }
+    
+    return [...new Set(patterns)].slice(0, 3); // 重複除去、最大3つ
+  }
+
+  // 🔧 新機能: 関心事ベースのアクション生成
+  generateContextAwareActions(originalActions, interests, techKeywords, workPatterns) {
+    if (originalActions.length > 0 && 
+        originalActions.some(action => action !== '今日のタスクと日常作業')) {
+      // 元のアクションがある場合は、それを技術的に強化
+      return originalActions.map(action => 
+        this.enhanceActionWithTechnicalContext(action, interests, techKeywords)
+      ).map((action, i) => `${i + 1}. ${action}`).join('\n');
+    }
+    
+    // アクションが不明または汎用的な場合、関心事に基づいて生成
+    const contextAwareActions = [
+      `${interests[0] || 'バックエンド'}システムの${workPatterns[0] || '実装作業'}`,
+      `${techKeywords[0] || 'API'}を使った${workPatterns[1] || '機能開発'}`,
+      `${techKeywords[1] || 'データベース'}の${workPatterns[2] || 'パフォーマンス調査'}`,
+      `${interests[1] || 'AI'}関連の技術調査と実装検討`
+    ];
+    
+    // ランダムに2-3個選択
+    const selectedActions = contextAwareActions
+      .sort(() => 0.5 - Math.random())
+      .slice(0, 2 + Math.floor(Math.random() * 2));
+    
+    return selectedActions.map((action, i) => `${i + 1}. ${action}`).join('\n');
+  }
+
+  // 🔧 新機能: アクションの技術的強化
+  enhanceActionWithTechnicalContext(action, interests, techKeywords) {
+    if (action === '今日のタスクと日常作業' || action.includes('日常作業')) {
+      return `${interests[0] || 'バックエンド'}関連の実装作業と${techKeywords[0] || 'API'}改善`;
+    }
+    
+    if (action.includes('タスク') && !action.includes('API') && !action.includes('実装')) {
+      return `${action.replace('タスク', `${techKeywords[0] || '開発'}タスク`)}（${interests[0] || '技術'}関連）`;
+    }
+    
+    return action;
+  }
+
+  // 🔧 新機能: 関心事ベースのタイトル例生成
+  generateExampleTitle(interests, techKeywords) {
+    const templates = [
+      `${techKeywords[0] || 'API'}実装でいい感じの進捗があった日`,
+      `${interests[0] || 'バックエンド'}開発で新しい発見があった日`,
+      `${techKeywords[1] || 'システム'}改善に集中できた日`,
+      `${interests[1] || 'AI'}技術の調査で学びがあった日`,
+      `${techKeywords[0] || 'プログラミング'}でスムーズに進められた日`
+    ];
+    
+    return templates[Math.floor(Math.random() * templates.length)];
+  }
+
+  // 既存のメソッド...
   async chatCompletion(messages, options = {}) {
     console.log(`🤖 OpenAI API呼び出し開始 - フォールバックモード: ${this.fallbackMode}`);
     
@@ -83,7 +304,6 @@ class OpenAIClient {
 
   // プロフィール分析専用のAPI呼び出し
   async analyzeProfile(articles, targetUser) {
-    // 記事データを要約して最適化
     const optimizedArticles = this.optimizeArticlesForAnalysis(articles);
     
     const systemPrompt = `あなたは文体分析の専門家です。
@@ -132,8 +352,8 @@ ${optimizedArticles}
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt }
     ], {
-      model: 'gpt-4o-mini', // 長いコンテキストに対応
-      temperature: 0.3, // 分析は安定した結果を求める
+      model: 'gpt-4o-mini',
+      temperature: 0.3,
       maxTokens: 2000
     });
   }
@@ -141,11 +361,9 @@ ${optimizedArticles}
   // 記事データを分析用に最適化
   optimizeArticlesForAnalysis(articles) {
     return articles.slice(0, 15).map((article, index) => {
-      // 本文を重要部分のみに要約
       const body = article.body_md || '';
       const lines = body.split('\n');
       
-      // 重要な行を抽出（タスク、感情表現、TILなど）
       const importantLines = lines.filter(line => 
         line.includes('- [x]') || 
         line.includes('##') ||
@@ -155,79 +373,13 @@ ${optimizedArticles}
         line.includes('だね') ||
         line.includes('って') ||
         line.length > 0 && line.length < 100
-      ).slice(0, 10); // 最初の10行のみ
+      ).slice(0, 10);
       
       const optimizedBody = importantLines.join('\n');
       
       return `--- 記事${index + 1}: ${article.name} ---
 ${optimizedBody.substring(0, 500)}${optimizedBody.length > 500 ? '...' : ''}`;
     }).join('\n\n');
-  }
-
-  // 日記生成専用のAPI呼び出し
-  async generateDiary(targetUser, actions, profileAnalysis, contextData = {}) {
-    const systemPrompt = `あなたは${targetUser}さんの代筆を行う専門システムです。
-${targetUser}さんの文体的特徴を完全に再現し、自然で個性的な日記を生成してください。
-
-文体特徴：
-- 語調: ${profileAnalysis.writing_style?.primary_tone || 'casual'}
-- 特徴的表現: ${profileAnalysis.writing_style?.characteristic_expressions?.join(', ') || '一般的な表現'}
-- 感情表現: ${profileAnalysis.writing_style?.emotion_style || '標準的'}
-- 関心事: ${profileAnalysis.interests?.main_categories?.join(', ') || '技術全般'}
-
-**絶対的な生成ルール（厳守）**：
-1. 出力の1行目は必ず「タイトル: 【代筆】${targetUser}: [内容に基づく具体的なタイトル]」
-2. 2行目は空行
-3. 3行目から日記本文開始
-4. ${targetUser}さんらしい文体で書く
-5. 以下の構成で書く：
-   ## やることやったこと
-   ## TIL  
-   ## こんな気分
-
-**出力テンプレート（必ず従ってください）**：
-タイトル: 【代筆】${targetUser}: [今日の内容を表す具体的なタイトル]
-
-## やることやったこと
-[内容]
-
-## TIL
-[内容]
-
-## こんな気分
-[内容]
-
-**重要**: 絶対に「タイトル:」から始めてください。セクションヘッダー（##）から始めることは禁止です。`;
-
-    const actionsText = actions.length > 0 ? 
-      actions.map((action, i) => `${i + 1}. ${action}`).join('\n') : 
-      '今日の具体的な作業内容は不明';
-
-    const userPrompt = `今日の${targetUser}さんの行動：
-${actionsText}
-
-${contextData.additional_context ? `追加コンテキスト：\n${contextData.additional_context}` : ''}
-
-上記の情報を基に、${targetUser}さんらしい日記を生成してください。
-
-**出力の1行目は必ず「タイトル: 【代筆】${targetUser}: [具体的なタイトル]」から始めてください。**
-
-例：
-タイトル: 【代筆】${targetUser}: プログラミングでいい感じの進捗があった日
-
-## やることやったこと
-...
-
-この形式を厳守してください。`;
-
-    return this.chatCompletion([
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt }
-    ], {
-      model: 'gpt-4o-mini', // 効率的なモデル
-      temperature: 0.6, // 創造性と制御のバランス
-      maxTokens: 1200
-    });
   }
 
   // 日記の品質チェック
@@ -266,13 +418,13 @@ ${generatedDiary}
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt }
     ], {
-      model: 'gpt-4o-mini', // コスト効率を重視
-      temperature: 0.2, // 評価は客観的に
+      model: 'gpt-4o-mini',
+      temperature: 0.2,
       maxTokens: 800
     });
   }
 
-  // フォールバックレスポンス（API未設定時）
+  // フォールバックレスポンス - 関心事反映版
   fallbackResponse(messages, options) {
     console.log('🔄 OpenAI API未設定のため、フォールバック応答を使用');
     
@@ -284,24 +436,24 @@ ${generatedDiary}
         content: JSON.stringify({
           writing_style: {
             primary_tone: "casual",
-            characteristic_expressions: ["だね", "って感じ"],
+            characteristic_expressions: ["だね", "って感じ", "いい感じ"],
             emotion_style: "フレンドリーで親しみやすい",
             formality_level: 2
           },
           interests: {
-            main_categories: ["バックエンド", "AI"],
-            technical_keywords: ["API", "データベース"],
-            learning_patterns: ["実装して学ぶタイプ"]
+            main_categories: ["AI", "ソフトウェア開発", "ハッカソン", "backend"],
+            technical_keywords: ["API", "データベース", "機械学習", "システム設計"],
+            learning_patterns: ["実装して学ぶタイプ", "新技術への積極的取り組み"]
           },
           behavior_patterns: {
-            typical_tasks: ["実装", "コードレビュー", "技術調査"],
-            work_style: "集中型",
-            article_structure: "やったこと中心"
+            typical_tasks: ["API実装", "システム改善", "技術調査", "バックエンド開発"],
+            work_style: "技術的な深掘りを好む集中型",
+            article_structure: "具体的な実装内容中心"
           },
           personality_traits: {
-            communication_style: "カジュアルで分かりやすい",
-            problem_solving_approach: "実践的",
-            team_interaction: "協力的"
+            communication_style: "技術的だがカジュアルで分かりやすい",
+            problem_solving_approach: "実践的・体系的",
+            team_interaction: "技術共有を重視する協力的"
           }
         }, null, 2),
         fallback: true
@@ -309,22 +461,25 @@ ${generatedDiary}
     } else if (lastMessage.includes('日記')) {
       return {
         success: true,
-        content: `タイトル: 【代筆】okamoto-takuya: 今日も開発でいい進捗だった日
+        content: `タイトル: 【代筆】okamoto-takuya: AI統合システムでバックエンド改善が進んだ日
 
 ## やることやったこと
 
-- [x] 代筆さんシステムの改善作業
-- [x] OpenAI API統合の検討
-- [x] LLM連携機能の実装
+- [x] GhostWriter代筆システムのAI統合機能実装
+- [x] OpenAI APIとMCPサーバーの連携改善
+- [x] データベース設計の見直しとパフォーマンス調査
+- [x] 機械学習パイプラインの最適化検討
 
 ## TIL
 
-- AIを活用した文章生成の仕組みについて理解が深まった
-- プロンプトエンジニアリングの重要性を実感
+- AI統合システムでのプロンプトエンジニアリングの重要性を実感した
+- MCP（Model Context Protocol）の活用でシステム間連携が格段に改善できることを発見
+- バックエンドAPIの設計において、拡張性と性能のバランスを取る新しいアプローチを学んだ
+- ハッカソン的な開発速度でも品質を保つ方法論について理解が深まった
 
 ## こんな気分
 
-技術的な挑戦が多い一日だったけど、着実に進歩している感じ。AI統合は予想以上に上手くいった、この調子で進めていきたいね！`,
+技術的な挑戦が多い一日だったけど、AI統合とバックエンド改善が予想以上にうまくいって、すごくいい感じ！特にシステム設計の部分で新しい発見があったのが嬉しいね。明日もこの勢いで、さらに深いところまで実装していきたいって思ってる。`,
         fallback: true
       };
     }
