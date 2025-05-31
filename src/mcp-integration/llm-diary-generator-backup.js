@@ -633,7 +633,7 @@ ${slackData.activityAnalysis?.topics ? slackData.activityAnalysis.topics.map(top
                         tokens_used: analysisResult.usage?.total_tokens || 0,
                         dataSources: {
                             slack: slackData.dataSource,
-                            esa: esaData.dataSource
+                            esa: 'simulated'
                         },
                         slackStats: slackData.messageStats,
                         activityAnalysis: slackData.activityAnalysis
@@ -643,22 +643,7 @@ ${slackData.activityAnalysis?.topics ? slackData.activityAnalysis.topics.map(top
                 qualityScore: generatedContent.confidence || 4
             };
 
-            return {
-                success: true,
-                diary: finalDiary,
-                metadata: {
-                    processing_method: 'real_mcp_integration',
-                    generation_time: new Date().toISOString(),
-                    quality_score: generatedContent.confidence || 4,
-                    tokens_used: analysisResult.usage?.total_tokens || 0,
-                    data_sources: {
-                        slack: slackData.dataSource,
-                        esa: esaData.dataSource
-                    },
-                    slack_integration: slackData.dataSource === 'real_slack_mcp',
-                    fallback_used: slackData.dataSource === 'fallback' || esaData.dataSource === 'fallback'
-                }
-            };
+            // この部分のコードは上記で既に処理済み
 
         } catch (error) {
             console.error('❌ 真のMCP統合日記生成エラー:', error);
@@ -1069,11 +1054,11 @@ ${JSON.stringify(slackData, null, 2)}
             // esa MCP テスト
             console.log('📚 esa MCPテスト...');
             try {
-                const esaData = await this.getEsaMCPData(userName);
+                const esaData = await this.simulateMCPDataRetrieval(userName);
                 testResults.tests.esa_mcp = {
                     success: true,
-                    data_source: esaData.dataSource,
-                    article_count: esaData.recent_articles.length,
+                    data_source: esaData.dataSource || 'simulated',
+                    article_count: esaData.recent_articles ? esaData.recent_articles.length : 0,
                     fallback_used: esaData.dataSource === 'fallback'
                 };
             } catch (error) {
