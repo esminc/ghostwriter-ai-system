@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node src/mcp-integration/start-mcp-system.js",
     "start:phase1": "node src/index.js",
+    "start:strategy-b": "node src/mcp-integration/llm-diary-generator-b.js",
     "slack": "node src/slack-bot.js",
     "slack:dev": "nodemon src/slack-bot.js",
     "test": "node src/index.js",
@@ -20,13 +21,16 @@
     "test:improved": "node test-improved-user-search.js",
     "test:mapping": "node test-user-mapping.js",
     "test:auto-mapping": "node test-auto-mapping.js",
+    "test:strategy-b": "node test-strategy-b-improved.js",
     "mcp:test": "node src/mcp-integration/test-mcp-system.js",
     "mcp:start": "node src/mcp-integration/start-mcp-system.js",
     "mcp:dev": "nodemon src/mcp-integration/start-mcp-system.js",
     "mcp:phase2b": "node src/mcp-integration/phase2b-test.js",
+    "mcp:strategy-b": "node src/mcp-integration/llm-diary-generator-b.js",
     "reset:db": "node src/reset-database.js",
     "dev": "nodemon src/mcp-integration/start-mcp-system.js",
     "dev:phase1": "nodemon src/index.js",
+    "dev:strategy-b": "nodemon src/mcp-integration/llm-diary-generator-b.js",
     "test:watch": "jest --watch",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix"
@@ -52,7 +56,9 @@
     "axios": "^1.6.0",
     "dotenv": "^16.3.1",
     "openai": "^4.20.1",
-    "express": "^4.18.2"
+    "express": "^4.18.2",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "mcp-client": "^1.0.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.2",
