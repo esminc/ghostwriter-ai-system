@@ -1,15 +1,16 @@
-// MCP統合版 LLM日記生成システム - 戦略B改良版
+// MCP統合版 LLM日記生成システム - メインシステム
+// 関心事分析付きフッター強化版 (旧：戦略B改良版)
 // 既存OSSを活用した真のMCP統合による高効率実装
 
 const OpenAIClient = require('../ai/openai-client');
 const SlackMCPWrapper = require('./slack-mcp-wrapper');
 
-class LLMDiaryGeneratorB {
+class LLMDiaryGenerator {
     constructor() {
         this.openaiClient = new OpenAIClient();
         this.slackMCPWrapper = new SlackMCPWrapper();
         this.isInitialized = false;
-        console.log('🤖 戦略B改良版MCP統合システム初期化開始...');
+        console.log('🤖 関心事分析付きフッター強化版MCP統合システム初期化開始...');
     }
     
     /**
@@ -537,4 +538,4 @@ ${slackData.productivityMetrics ? `**生産性スコア**: ${slackData.productiv
     }
 }
 
-module.exports = LLMDiaryGeneratorB;
+module.exports = LLMDiaryGenerator;
