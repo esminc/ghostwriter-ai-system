@@ -429,15 +429,15 @@ class FullFeaturedGhostWriterBot {
             });
 
             if (esaResult.success) {
-                // ✅ esa投稿成功
+                // ✅ esa投稿成功（WIP状態）
                 await respond({
-                    text: '✅ esa投稿完了！',
+                    text: '✅ esa代筆投稿完了（WIP状態）！',
                     blocks: [
                         {
                             type: 'section',
                             text: {
                                 type: 'mrkdwn',
-                                text: `🎉 *代筆投稿が完了しました！*\n\n📝 **タイトル:** ${title}\n👤 **代筆対象:** esa投稿で確認してください\n🔗 **URL:** ${esaResult.url}\n📊 **投稿番号:** #${esaResult.number}\n\n💡 投稿者は \`esa_bot\` ですが、タイトルに代筆対象ユーザーが明記されています。`
+                                text: `🎉 *代筆投稿が完了しました！*\n\n📝 **タイトル:** ${title}\n👤 **代筆対象:** esa投稿で確認してください\n🔗 **URL:** ${esaResult.url}\n📊 **投稿番号:** #${esaResult.number}\n\n🔴 **WIP状態で投稿されました**\nレビュー後、必要に応じてShip Itしてください。\n\n💡 投稿者は \`esa_bot\` ですが、タイトルに代筆対象ユーザーが明記されています。`
                             }
                         },
                         {
