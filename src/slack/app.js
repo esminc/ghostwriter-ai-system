@@ -259,18 +259,39 @@ class GhostWriterSlackBot {
             console.log(`📊 Analyzing profile for user: ${userName} (auto-mapped to ${esaScreenName})`);
             const profile = await this.profileAnalyzer.analyzeFromEsa(userName, esaScreenName);
 
-            // 2. AI日記生成
-            console.log(`✍️ Generating AI diary for user: ${esaScreenName} (mapped from ${userName})`);
-            const diary = await this.diaryGenerator.generateDiary(profile, {
-                author: esaScreenName,
-                inputActions: [], // 明示的に空配列を渡す
-                contextData: {
-                    allow_automatic: true, // 自動生成を許可
-                    source: 'slack_bot',
-                    generation_time: new Date().toISOString()
-                },
-                includeSchedule: true // Google Calendar連携は後で実装
+            // 2. AI日記生成（MCP統合版使用）
+            console.log(`✍️ Generating AI diary with MCP integration for user: ${esaScreenName} (mapped from ${userName})`);
+            
+            // MCP統合版日記生成システムを使用
+            const LLMDiaryGenerator = require('../mcp-integration/llm-diary-generator');
+            const mcpGenerator = new LLMDiaryGenerator();
+            
+            // SlackユーザーIDを渡してMCP統合日記生成
+            const mcpResult = await mcpGenerator.generateDiaryWithMCP(esaScreenName, {
+                slackUserId: userId, // 🎯 実際のSlackユーザーIDを渡す
+                includeThreads: true,
+                maxChannels: 10,
+                messageLimit: 50
             });
+            
+            let diary;
+            if (mcpResult.success) {
+                diary = mcpResult.diary;
+                console.log('✅ MCP統合日記生成成功');
+            } else {
+                console.log('⚠️ MCP統合失敗、フォールバック実行');
+                // フォールバックとして従来の日記生成
+                diary = await this.diaryGenerator.generateDiary(profile, {
+                    author: esaScreenName,
+                    inputActions: [],
+                    contextData: {
+                        allow_automatic: true,
+                        source: 'slack_bot_fallback',
+                        generation_time: new Date().toISOString()
+                    },
+                    includeSchedule: true
+                });
+            }
             
             // 🔍 デバッグ: diary生成結果を確認
             console.log('🔍 Generated diary debug:', {
@@ -281,10 +302,18 @@ class GhostWriterSlackBot {
                 qualityScore: diary.qualityScore
             });
 
-            // 3. プレビュー表示（マッピング情報も含む）
+            // 3. プレビュー表示（マッピング情報とMCP統合情報も含む）
+            const previewData = {
+                diary: diary,
+                userId: userId,
+                mappingResult: mappingResult,
+                mcpIntegration: mcpResult?.success || false,
+                slackDataSource: mcpResult?.metadata?.data_sources?.slack || 'unknown'
+            };
+            
             await respond({
                 text: '✨ AI代筆日記が完成しました！',
-                blocks: this.getDiaryPreviewBlocks(diary, userId, mappingResult),
+                blocks: this.getDiaryPreviewBlocks(previewData.diary, previewData.userId, previewData.mappingResult, previewData),
                 replace_original: true,
                 response_type: 'ephemeral'
             });
@@ -630,13 +659,28 @@ class GhostWriterSlackBot {
             }
         ];
 
-        // マッピング情報がある場合は追加表示
+        // マッピング情報とMCP統合情報がある場合は追加表示
         if (mappingResult && mappingResult.success) {
             blocks.push({
                 type: 'section',
                 text: {
                     type: 'mrkdwn',
                     text: `*🔗 自動マッピング情報:*\n方法: ${mappingResult.mappingMethod}${mappingResult.fallbackUsed ? ' (フォールバック使用)' : ''}\n信頼度: ${(mappingResult.confidence * 100).toFixed(1)}%\n処理時間: ${mappingResult.processingTime}ms`
+                }
+            });
+        }
+        
+        // MCP統合情報の表示 (第4引数で受け取る)
+        if (arguments[3]) {
+            const previewData = arguments[3];
+            const mcpStatus = previewData.mcpIntegration ? '✅ MCP統合成功' : '⚠️ フォールバック';
+            const slackDataStatus = previewData.slackDataSource === 'real_slack_mcp' ? '✅ 実Slackデータ' : '⚠️ 模擬データ';
+            
+            blocks.push({
+                type: 'section',
+                text: {
+                    type: 'mrkdwn',
+                    text: `*🚀 Slack投稿参照機能:*\n${mcpStatus}\nSlackデータ: ${slackDataStatus}\nデータソース: ${previewData.slackDataSource}`
                 }
             });
         }
@@ -678,33 +722,33 @@ class GhostWriterSlackBot {
             }
         );
 
-        // コンテキスト情報（拡張版）
-        const contextText = `🤖 AI品質スコア: ${diary.qualityScore || 'N/A'} | 生成時間: ${new Date().toLocaleTimeString('ja-JP')} | 📊 文字数: ${diary.content ? diary.content.length : 0}文字`;
+        // コンテキスト情報（拡張版 - MCP統合対応）
+        let contextText = `🤖 AI品質スコア: ${diary.qualityScore || 'N/A'} | 生成時間: ${new Date().toLocaleTimeString('ja-JP')} | 📊 文字数: ${diary.content ? diary.content.length : 0}文字`;
         
         if (mappingResult) {
             const mappingInfo = mappingResult.success ? 
                 `| 🔗 マッピング: ${mappingResult.mappingMethod}` : 
                 `| ⚠️ マッピング失敗`;
-            blocks.push({
-                type: 'context',
-                elements: [
-                    {
-                        type: 'mrkdwn',
-                        text: contextText + mappingInfo
-                    }
-                ]
-            });
-        } else {
-            blocks.push({
-                type: 'context',
-                elements: [
-                    {
-                        type: 'mrkdwn',
-                        text: contextText
-                    }
-                ]
-            });
+            contextText += mappingInfo;
         }
+        
+        if (arguments[3]) {
+            const previewData = arguments[3];
+            const mcpInfo = previewData.mcpIntegration ? 
+                `| 🚀 MCP統合: 成功` : 
+                `| ⚠️ MCP統合: フォールバック`;
+            contextText += mcpInfo;
+        }
+        
+        blocks.push({
+            type: 'context',
+            elements: [
+                {
+                    type: 'mrkdwn',
+                    text: contextText
+                }
+            ]
+        });
 
         return blocks;
     }

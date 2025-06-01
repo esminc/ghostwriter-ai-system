@@ -3,7 +3,7 @@
 // 既存OSSを活用した真のMCP統合による高効率実装
 
 const OpenAIClient = require('../ai/openai-client');
-const SlackMCPWrapper = require('./slack-mcp-wrapper');
+const SlackMCPWrapper = require('./slack-mcp-wrapper-fixed');
 
 class LLMDiaryGenerator {
     constructor() {
@@ -58,6 +58,7 @@ class LLMDiaryGenerator {
 
     /**
      * 🆕 真のSlack MCPデータ取得（戦略B改良版）
+     * SlackBotから直接SlackユーザーIDを受け取る版
      */
     async getSlackMCPData(userName, options = {}) {
         console.log(`💬 真のSlack MCP統合データ取得: ${userName}`);
@@ -67,8 +68,17 @@ class LLMDiaryGenerator {
         }
         
         try {
-            // SlackMCPWrapperを使用して実データ取得
-            const slackData = await this.slackMCPWrapper.getUserSlackData(userName, options);
+            let slackData;
+            
+            // SlackユーザーIDが提供されている場合は直接使用
+            if (options.slackUserId) {
+                console.log(`🎯 SlackユーザーID直接使用: ${options.slackUserId}`);
+                slackData = await this.slackMCPWrapper.getUserSlackDataByUserId(options.slackUserId, options);
+            } else {
+                // 従来の方法（名前検索）
+                console.log(`🔍 従来の名前検索: ${userName}`);
+                slackData = await this.slackMCPWrapper.getUserSlackData(userName, options);
+            }
             
             console.log('✅ 真のSlack MCP統合データ取得成功:', {
                 dataSource: slackData.dataSource,
@@ -218,9 +228,15 @@ ${slackData.productivityMetrics ? `**生産性スコア**: ${slackData.productiv
 
     /**
      * 🚀 戦略B改良版MCP統合による日記生成フロー
+     * SlackユーザーID対応版
      */
-    async generateDiaryWithMCP(userName) {
+    async generateDiaryWithMCP(userName, options = {}) {
         console.log(`🚀 戦略B改良版MCP統合日記生成開始: ${userName}`);
+        
+        // SlackユーザーIDが提供されている場合はログ出力
+        if (options.slackUserId) {
+            console.log(`🎯 SlackユーザーID使用: ${options.slackUserId}`);
+        }
 
         try {
             // 初期化確認
@@ -232,7 +248,7 @@ ${slackData.productivityMetrics ? `**生産性スコア**: ${slackData.productiv
             const articlesData = await this.simulateMCPDataRetrieval(userName);
             
             // Phase 2: 真のSlackデータ取得（戦略B改良版の核心）
-            const slackData = await this.getSlackMCPData(userName);
+            const slackData = await this.getSlackMCPData(userName, options);
             
             // Phase 3: LLMによる統合分析と日記生成
             const analysisPrompt = this.buildIntegratedAnalysisPrompt(userName, articlesData, slackData);
