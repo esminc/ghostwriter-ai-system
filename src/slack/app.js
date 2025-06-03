@@ -202,13 +202,16 @@ class GhostWriterSlackBot {
             try {
                 const userInfo = await client.users.info({ user: userId });
                 const realName = userInfo.user.real_name;
-                const displayName = userInfo.user.display_name;
-                const email = userInfo.user.profile.email;
+                const rawDisplayName = userInfo.user.display_name;
+                const email = userInfo.user.profile?.email;
+                
+                // 🔧 Phase 5.1修正: 表示名フォールバック実装
+                const displayName = rawDisplayName || realName || userName || 'Unknown User';
                 
                 console.log(`📋 詳細ユーザー情報:`);
                 console.log(`   - Slack ID: ${userId}`);
                 console.log(`   - ユーザー名: ${userName}`);
-                console.log(`   - 表示名: ${displayName}`);
+                console.log(`   - 表示名: ${displayName} ${rawDisplayName ? '(設定済み)' : '(フォールバック適用)'}`);
                 console.log(`   - 実名: ${realName}`);
                 console.log(`   - メール: ${email}`);
                 

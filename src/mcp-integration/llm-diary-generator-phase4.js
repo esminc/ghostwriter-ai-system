@@ -583,7 +583,7 @@ ${slackData.productivityMetrics ? `**生産性スコア**: ${(slackData.producti
             }
             
             // 3. データ分析と整形
-            console.log('✅ esa記事データ処理成功（配列形式）: ${postsData.length}件の記事を取得');
+            console.log(`✅ esa記事データ処理成功（配列形式）: ${postsData.length}件の記事を取得`);
             console.log('🎉 esa MCP統合完全成功！real_esa_mcp_dataを実現！');
             const analyzedData = this.analyzeEsaArticles(postsData, userName, searchData.posts.length);
             
