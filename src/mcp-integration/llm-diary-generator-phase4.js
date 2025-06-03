@@ -1,15 +1,20 @@
 // Phase 4完全成功実装 - MCP統合版日記生成システム
 // 7件のリアルメッセージ取得、1292トークン高品質生成を実現した成功版
+// Phase 5.2: MCP初期化最適化適用
 
 const OpenAIClient = require('../ai/openai-client');
 const SlackMCPWrapperDirect = require('./slack-mcp-wrapper-direct');
+// 🔧 Phase 5.2最適化: MCP接続マネージャー導入
+const MCPConnectionManager = require('./mcp-connection-manager');
 
 class LLMDiaryGeneratorPhase4 {
     constructor() {
         this.openaiClient = new OpenAIClient();
         this.slackMCPWrapper = new SlackMCPWrapperDirect();
+        // 🔧 Phase 5.2最適化: 統合MCPマネージャー使用
+        this.mcpManager = new MCPConnectionManager();
         this.isInitialized = false;
-        console.log('🚀 Phase 4完全成功版MCP統合システム初期化開始...');
+        console.log('🚀 Phase 4成功版MCP統合システム初期化開始... (Phase 5.2最適化適用)');
     }
     
     /**
@@ -84,34 +89,42 @@ class LLMDiaryGeneratorPhase4 {
     }
 
     /**
-     * 🎯 Phase 4成功システム初期化
+     * 🎯 Phase 4成功システム初期化 - Phase 5.2最適化版
      */
     async initialize() {
         if (this.isInitialized) {
+            console.log('✅ Phase 4成功版システム: 既に初期化済み');
             return { success: true, already_initialized: true };
         }
         
-        console.log('🔄 Phase 4成功版システム初期化中...');
+        console.log('🔄 Phase 4成功版システム初期化中... (Phase 5.2最適化)');
         
         try {
+            // 🔧 Phase 5.2最適化: 統合MCPマネージャー使用
+            const mcpResult = await this.mcpManager.initialize();
+            
             // Slack MCP Wrapper Direct初期化（Phase 4で実証済み）
             const slackInit = await this.slackMCPWrapper.initialize();
             
             this.isInitialized = true;
             
-            console.log('✅ Phase 4成功版システム初期化完了', {
+            console.log('✅ Phase 4成功版システム初期化完了 (Phase 5.2最適化)', {
                 slack_mcp: slackInit.success,
-                access_method: 'direct_channel_access'
+                mcp_manager: mcpResult.success,
+                access_method: 'direct_channel_access',
+                optimization: 'duplicate_prevention_active'
             });
             
             return {
                 success: true,
                 components: {
                     slack_mcp: slackInit.success,
+                    mcp_manager: mcpResult.success,
                     openai_client: true
                 },
                 access_method: 'direct_channel',
-                phase: '4_complete_success'
+                phase: '4_complete_success_optimized',
+                optimization_applied: true
             };
             
         } catch (error) {

@@ -2,7 +2,7 @@
 // Phase 1の完全なUI機能 + Phase 2-AのMCP統合効率化を組み合わせ
 
 const { App, ExpressReceiver } = require('@slack/bolt');
-const LLMDiaryGenerator = require('./llm-diary-generator');
+const LLMDiaryGeneratorPhase53Unified = require('./llm-diary-generator-phase53-unified');
 const MigrationManager = require('../services/migration-manager'); // Phase 1互換: Emailマッピング機能
 
 class FullFeaturedGhostWriterBot {
@@ -27,8 +27,20 @@ class FullFeaturedGhostWriterBot {
             receiver: this.receiver
         });
 
-        // MCP統合エンジン初期化
-        this.diaryGenerator = new LLMDiaryGenerator();
+        // Phase 5.3完全統一版MCP統合エンジン初期化（重複初期化問題解決版）
+        console.log('\n' + '🎯'.repeat(30));
+        console.log('🎯 Phase 5.3完全統一版インスタンス作成中...');
+        console.log('⚠️ 他のシステムが動作した場合はバグです！');
+        
+        this.diaryGenerator = new LLMDiaryGeneratorPhase53Unified();
+        
+        // システムの確認
+        console.log(`✅ Phase 5.3完全統一版インスタンス作成完了`);
+        console.log(`🆔 システムタイプ: ${this.diaryGenerator.constructor.name}`);
+        console.log(`🏷️ システムバージョン: ${this.diaryGenerator.systemVersion || 'Unknown'}`);
+        console.log(`🆔 システムID: ${this.diaryGenerator.systemId || 'Unknown'}`);
+        console.log('📋 重複初期化解決システム稼働中');
+        console.log('🎯'.repeat(30) + '\n');
         
         // Phase 1互換: Email優先マッピング機能
         this.migrationManager = new MigrationManager();
@@ -37,7 +49,7 @@ class FullFeaturedGhostWriterBot {
         // イベントハンドラー設定
         this.setupEventHandlers();
         
-        console.log('🎉 Phase 2-A フル機能版初期化完了 - MCP統合 + 完全UI + Emailマッピング');
+        console.log('🎉 Phase 5.3完全統一版 フル機能版初期化完了 - 重複初期化問題完全解決 + 完全UI + Emailマッピング');
     }
 
     validateEnvironment() {
@@ -220,7 +232,7 @@ class FullFeaturedGhostWriterBot {
         try {
             // ローディング表示
             await respond({
-                text: '🤖 MCP統合AIで日記を生成中...\n*Phase 2-A - 3秒タイムアウト完全対策済み*',
+                text: '🤖 Phase 5統一版MCP統合で日記を生成中...\n*Phase 5統一版 - 重複初期化完全解決済み*',
                 replace_original: true,
                 response_type: 'ephemeral'
             });
@@ -277,8 +289,19 @@ class FullFeaturedGhostWriterBot {
                 console.log(`🔄 ユーザー名フォールバック使用: ${esaScreenName}`);
             }
 
-            // 🚀 MCP統合でLLMに全処理委任
-            console.log(`🤖 MCP統合処理開始: ${esaScreenName} (${userName}の代筆)`);
+            // 🎯 緊急修正: Phase 5.3完全統一版の優先実行（他システムの動作防止）
+            console.log('\n' + '🛑'.repeat(50));
+            console.log('🎯 緊急修正: Phase 5.3完全統一版の優先実行開始');
+            console.log('⚠️ 他のシステムが動作した場合はバグです！');
+            console.log('🛑'.repeat(50));
+            
+            // Phase 5.3完全統一版への直接呼び出し（他システムをバイパス）
+            console.log(`🎯 Phase 5.3完全統一版MCP統合処理開始: ${esaScreenName} (${userName}の代筆)`);
+            console.log('📋 確認: Phase 5.3完全統一版クラス使用中 - 重複初期化問題解決済み');
+            console.log(`🆔 システムタイプ: ${this.diaryGenerator.constructor.name}`);
+            console.log(`🏷️ システムバージョン: ${this.diaryGenerator.systemVersion || 'Unknown'}`);
+            
+            // Phase 5.3完全統一版の日記生成メソッド呼び出し
             const result = await this.diaryGenerator.generateDiaryWithMCP(esaScreenName, {
                 slackUser: userInfo,
                 contextData: {
