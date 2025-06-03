@@ -1,13 +1,18 @@
 // 段階的移行管理クラス - 手動マッピングから自動マッピングへの安全な移行
-const AutoUserMapper = require('./auto-user-mapper');
+// AutoUserMapper統合版
 const fs = require('fs').promises;
 const path = require('path');
 
 class MigrationManager {
     constructor() {
-        this.autoMapper = new AutoUserMapper();
         this.configPath = path.join(__dirname, '../../config/user-mappings.json');
         this.migrationLogPath = path.join(__dirname, '../../logs/mapping-migration.log');
+        
+        // 自動マッピング用プロパティ（旧AutoUserMapper統合）
+        this.esaMembers = null;
+        this.mappingCache = new Map();
+        this.lastCacheUpdate = null;
+        this.cacheExpiry = 1000 * 60 * 30; // 30分キャッシュ
         
         // 移行段階の定義
         this.migrationPhases = {
@@ -142,7 +147,7 @@ class MigrationManager {
      */
     async autoWithManualFallback(slackUserInfo) {
         // まず自動マッピングを試行
-        const autoResult = await this.autoMapper.mapSlackToEsa(slackUserInfo);
+        const autoResult = await this.mapSlackToEsa(slackUserInfo);
         
         if (autoResult.success) {
             return {
@@ -179,7 +184,7 @@ class MigrationManager {
         
         // 手動マッピング失敗時は自動マッピングにフォールバック
         console.log('⚠️ 手動マッピング失敗、自動マッピングにフォールバック');
-        const autoResult = await this.autoMapper.mapSlackToEsa(slackUserInfo);
+        const autoResult = await this.mapSlackToEsa(slackUserInfo);
         
         return {
             ...autoResult,
@@ -193,12 +198,401 @@ class MigrationManager {
      * Phase 3: 自動マッピングのみ
      */
     async autoMappingOnly(slackUserInfo) {
-        const result = await this.autoMapper.mapSlackToEsa(slackUserInfo);
+        const result = await this.mapSlackToEsa(slackUserInfo);
         return {
             ...result,
             mappingMethod: result.success ? `auto_${result.mappingMethod}` : 'auto_failed'
         };
     }
+
+    // ==============================================
+    // 自動マッピング機能（旧AutoUserMapper統合）
+    // ==============================================
+
+    /**
+     * Slackユーザー情報からesaユーザーを自動マッピング
+     * @param {Object} slackUserInfo - Slack APIから取得したユーザー情報
+     * @returns {Promise<Object>} マッピング結果
+     */
+    async mapSlackToEsa(slackUserInfo) {
+        try {
+            console.log('🔄 自動ユーザーマッピング開始:', {
+                slackId: slackUserInfo.id,
+                userName: slackUserInfo.name,
+                email: slackUserInfo.profile?.email,
+                realName: slackUserInfo.real_name
+            });
+
+            // メールアドレスによるマッピング（最優先）
+            if (slackUserInfo.profile?.email) {
+                const emailMapping = await this.mapByEmail(
+                    slackUserInfo.profile.email,
+                    slackUserInfo
+                );
+                if (emailMapping.success) {
+                    return emailMapping;
+                }
+            }
+
+            // 実名によるマッピング（次優先）
+            if (slackUserInfo.real_name) {
+                const nameMapping = await this.mapByRealName(
+                    slackUserInfo.real_name,
+                    slackUserInfo
+                );
+                if (nameMapping.success) {
+                    return nameMapping;
+                }
+            }
+
+            // ユーザー名による部分マッチング（最終手段）
+            const usernameMapping = await this.mapByUsername(
+                slackUserInfo.name,
+                slackUserInfo
+            );
+            if (usernameMapping.success) {
+                return usernameMapping;
+            }
+
+            // マッピング失敗
+            return {
+                success: false,
+                error: 'ユーザーマッピングが見つかりませんでした',
+                slackUser: {
+                    id: slackUserInfo.id,
+                    name: slackUserInfo.name,
+                    email: slackUserInfo.profile?.email
+                },
+                esaUser: null,
+                mappingMethod: 'none'
+            };
+
+        } catch (error) {
+            console.error('❌ 自動マッピングエラー:', error);
+            return {
+                success: false,
+                error: error.message,
+                slackUser: null,
+                esaUser: null,
+                mappingMethod: 'error'
+            };
+        }
+    }
+
+    /**
+     * メールアドレスによるマッピング
+     */
+    async mapByEmail(email, slackUserInfo) {
+        console.log(`📧 メールアドレスでマッピング: ${email}`);
+        
+        const esaMembers = await this.getEsaMembers();
+        if (!esaMembers) {
+            return { success: false, error: 'esaメンバー情報取得失敗' };
+        }
+
+        // メールアドレスでの完全一致検索
+        const matchedMember = esaMembers.find(member => 
+            member.email && member.email.toLowerCase() === email.toLowerCase()
+        );
+
+        if (matchedMember) {
+            console.log(`✅ メールアドレスマッピング成功:`, {
+                email: email,
+                esaScreenName: matchedMember.screen_name,
+                esaName: matchedMember.name
+            });
+
+            return {
+                success: true,
+                slackUser: {
+                    id: slackUserInfo.id,
+                    name: slackUserInfo.name,
+                    email: email
+                },
+                esaUser: {
+                    screen_name: matchedMember.screen_name,
+                    name: matchedMember.name,
+                    email: matchedMember.email
+                },
+                mappingMethod: 'email',
+                confidence: 1.0
+            };
+        }
+
+        console.log(`❌ メールアドレスマッピング失敗: ${email}`);
+        return { success: false, error: 'メールアドレス一致なし' };
+    }
+
+    /**
+     * 実名によるマッピング
+     */
+    async mapByRealName(realName, slackUserInfo) {
+        console.log(`👤 実名でマッピング: ${realName}`);
+        
+        const esaMembers = await this.getEsaMembers();
+        if (!esaMembers) {
+            return { success: false, error: 'esaメンバー情報取得失敗' };
+        }
+
+        // 実名での部分一致検索（日本語名対応）
+        const normalizedRealName = this.normalizeJapaneseName(realName);
+        
+        const matchedMember = esaMembers.find(member => {
+            if (!member.name) return false;
+            
+            const normalizedEsaName = this.normalizeJapaneseName(member.name);
+            
+            // 完全一致
+            if (normalizedEsaName === normalizedRealName) return true;
+            
+            // 部分一致（姓または名）
+            const realNameParts = normalizedRealName.split(/\s+/);
+            const esaNameParts = normalizedEsaName.split(/\s+/);
+            
+            return realNameParts.some(part => 
+                esaNameParts.some(esaPart => 
+                    part.length >= 2 && esaPart.includes(part)
+                )
+            );
+        });
+
+        if (matchedMember) {
+            console.log(`✅ 実名マッピング成功:`, {
+                realName: realName,
+                esaScreenName: matchedMember.screen_name,
+                esaName: matchedMember.name
+            });
+
+            return {
+                success: true,
+                slackUser: {
+                    id: slackUserInfo.id,
+                    name: slackUserInfo.name,
+                    realName: realName
+                },
+                esaUser: {
+                    screen_name: matchedMember.screen_name,
+                    name: matchedMember.name,
+                    email: matchedMember.email
+                },
+                mappingMethod: 'realName',
+                confidence: 0.8
+            };
+        }
+
+        console.log(`❌ 実名マッピング失敗: ${realName}`);
+        return { success: false, error: '実名一致なし' };
+    }
+
+    /**
+     * ユーザー名による部分マッチング（改良版）
+     */
+    async mapByUsername(username, slackUserInfo) {
+        console.log(`🔤 ユーザー名でマッピング: ${username}`);
+        
+        const esaMembers = await this.getEsaMembers();
+        if (!esaMembers) {
+            return { success: false, error: 'esaメンバー情報取得失敗' };
+        }
+
+        // 1. 順序逆転パターンの検出（最優先）
+        const reversedMatch = this.findReversedNameMatch(username, esaMembers);
+        if (reversedMatch) {
+            console.log(`✅ 順序逆転マッチング成功:`, {
+                username: username,
+                esaScreenName: reversedMatch.screen_name,
+                confidence: 0.9
+            });
+
+            return {
+                success: true,
+                slackUser: {
+                    id: slackUserInfo.id,
+                    name: slackUserInfo.name
+                },
+                esaUser: {
+                    screen_name: reversedMatch.screen_name,
+                    name: reversedMatch.name,
+                    email: reversedMatch.email
+                },
+                mappingMethod: 'username_reversed',
+                confidence: 0.9
+            };
+        }
+
+        // 2. 通常のユーザー名正規化マッチング
+        const normalizedUsername = username.toLowerCase()
+            .replace(/[._-]/g, '');
+
+        const matchedMember = esaMembers.find(member => {
+            if (!member.screen_name) return false;
+            
+            const normalizedScreenName = member.screen_name.toLowerCase()
+                .replace(/[._-]/g, '');
+            
+            // 完全一致または高い類似度
+            return normalizedScreenName === normalizedUsername ||
+                   this.calculateSimilarity(normalizedUsername, normalizedScreenName) > 0.8;
+        });
+
+        if (matchedMember) {
+            console.log(`✅ ユーザー名マッピング成功:`, {
+                username: username,
+                esaScreenName: matchedMember.screen_name,
+                similarity: this.calculateSimilarity(
+                    normalizedUsername, 
+                    matchedMember.screen_name.toLowerCase().replace(/[._-]/g, '')
+                )
+            });
+
+            return {
+                success: true,
+                slackUser: {
+                    id: slackUserInfo.id,
+                    name: slackUserInfo.name
+                },
+                esaUser: {
+                    screen_name: matchedMember.screen_name,
+                    name: matchedMember.name,
+                    email: matchedMember.email
+                },
+                mappingMethod: 'username',
+                confidence: 0.7
+            };
+        }
+
+        console.log(`❌ ユーザー名マッピング失敗: ${username}`);
+        return { success: false, error: 'ユーザー名一致なし' };
+    }
+
+    /**
+     * esaメンバー情報を取得（キャッシュ付き）
+     */
+    async getEsaMembers() {
+        const now = Date.now();
+        
+        // キャッシュが有効な場合はそれを使用
+        if (this.esaMembers && 
+            this.lastCacheUpdate && 
+            (now - this.lastCacheUpdate) < this.cacheExpiry) {
+            console.log('💾 esaメンバー情報をキャッシュから取得');
+            return this.esaMembers;
+        }
+
+        console.log('🔄 esaメンバー情報を取得中...');
+        
+        try {
+            const EsaAPI = require('./esa-api');
+            const esaAPI = new EsaAPI(process.env.ESA_TEAM_NAME, process.env.ESA_ACCESS_TOKEN);
+            const result = await esaAPI.getMembers();
+            
+            if (result.success) {
+                this.esaMembers = result.members;
+                this.lastCacheUpdate = now;
+                
+                console.log(`✅ esaメンバー情報取得成功: ${this.esaMembers.length}人`);
+                
+                return this.esaMembers;
+            } else {
+                console.error('❌ esaメンバー情報取得失敗:', result.error);
+                return null;
+            }
+        } catch (error) {
+            console.error('❌ esaメンバー取得エラー:', error);
+            return null;
+        }
+    }
+
+    /**
+     * 日本語名の正規化
+     */
+    normalizeJapaneseName(name) {
+        if (!name) return '';
+        
+        return name
+            .trim()
+            .replace(/\s+/g, ' ')  // 複数スペースを単一スペースに
+            .replace(/　/g, ' ')   // 全角スペースを半角に
+            .toLowerCase();
+    }
+
+    /**
+     * 文字列の類似度計算（レーベンシュタイン距離ベース）
+     */
+    calculateSimilarity(str1, str2) {
+        if (!str1 || !str2) return 0;
+        
+        const len1 = str1.length;
+        const len2 = str2.length;
+        
+        if (len1 === 0) return len2 === 0 ? 1 : 0;
+        if (len2 === 0) return 0;
+        
+        const matrix = Array(len2 + 1).fill().map(() => Array(len1 + 1).fill(0));
+        
+        for (let i = 0; i <= len1; i++) matrix[0][i] = i;
+        for (let j = 0; j <= len2; j++) matrix[j][0] = j;
+        
+        for (let j = 1; j <= len2; j++) {
+            for (let i = 1; i <= len1; i++) {
+                const cost = str1[i - 1] === str2[j - 1] ? 0 : 1;
+                matrix[j][i] = Math.min(
+                    matrix[j - 1][i] + 1,      // deletion
+                    matrix[j][i - 1] + 1,      // insertion
+                    matrix[j - 1][i - 1] + cost // substitution
+                );
+            }
+        }
+        
+        const maxLen = Math.max(len1, len2);
+        return (maxLen - matrix[len2][len1]) / maxLen;
+    }
+
+    /**
+     * 順序逆転パターンの検出（takuya.okamoto ↔ okamoto-takuya）
+     */
+    findReversedNameMatch(slackUsername, esaMembers) {
+        // Slackユーザー名を部分に分解
+        const slackParts = slackUsername.split(/[._-]/);
+        
+        // 2部分の名前のみ対象（first.last パターン）
+        if (slackParts.length !== 2) {
+            return null;
+        }
+        
+        const [slackFirst, slackLast] = slackParts.map(part => part.toLowerCase());
+        
+        // esaメンバーで順序逆転パターンを検索
+        const matchedMember = esaMembers.find(member => {
+            if (!member.screen_name) return false;
+            
+            const esaParts = member.screen_name.split(/[._-]/);
+            
+            // 2部分の名前のみ対象
+            if (esaParts.length !== 2) {
+                return false;
+            }
+            
+            const [esaFirst, esaLast] = esaParts.map(part => part.toLowerCase());
+            
+            // 順序逆転チェック: slack(first.last) ↔ esa(last-first)
+            return (slackFirst === esaLast && slackLast === esaFirst);
+        });
+        
+        if (matchedMember) {
+            console.log(`🔄 順序逆転パターン検出:`, {
+                slack: `${slackFirst}.${slackLast}`,
+                esa: `${slackLast}-${slackFirst}`,
+                matched: matchedMember.screen_name
+            });
+        }
+        
+        return matchedMember;
+    }
+
+    // ==============================================
+    // 従来のMigrationManager機能
+    // ==============================================
 
     /**
      * 移行ログの記録
@@ -336,86 +730,7 @@ class MigrationManager {
             console.log(`   ${phase}: ${count}回 (${percentage}%)`);
         });
         
-        // 次のフェーズへの移行推奨
-        console.log('\n💡 移行推奨事項:');
-        
-        if (this.currentPhase === this.migrationPhases.PHASE_0) {
-            console.log('   🚀 Phase 1への移行を推奨: 自動マッピングの導入開始');
-        } else if (this.currentPhase === this.migrationPhases.PHASE_1) {
-            const autoSuccessRate = Object.entries(stats.methodStats)
-                .filter(([method, count]) => method.startsWith('auto_'))
-                .reduce((sum, [method, count]) => sum + count, 0) / stats.totalMappings;
-                
-            if (autoSuccessRate > 0.8) {
-                console.log('   ✅ Phase 3への直接移行を推奨: 自動マッピングが十分安定');
-            } else {
-                console.log('   ⚠️ Phase 2での様子見を推奨: 自動マッピングの精度向上が必要');
-            }
-        } else if (this.currentPhase === this.migrationPhases.PHASE_2) {
-            if (stats.fallbackUsage / stats.totalMappings < 0.2) {
-                console.log('   🎉 Phase 3への移行を推奨: フォールバック使用率が低く安定');
-            } else {
-                console.log('   ⏳ Phase 2での継続運用を推奨: フォールバック使用率がまだ高い');
-            }
-        } else {
-            console.log('   🎯 完全自動マッピング運用中: 継続監視');
-        }
-        
         return stats;
-    }
-
-    /**
-     * 段階的移行のテスト実行
-     */
-    async testMigrationPhases() {
-        console.log('🧪 段階的移行テスト開始...');
-        
-        // テスト用ユーザー
-        const testUsers = [
-            {
-                id: 'U1234567890',
-                name: 'takuya.okamoto',
-                real_name: '岡本拓也',
-                profile: { email: 'takuya.okamoto@esm.co.jp' }
-            },
-            {
-                id: 'U0987654321',
-                name: 'new.user',
-                real_name: '新規ユーザー',
-                profile: { email: 'new.user@esm.co.jp' }
-            }
-        ];
-        
-        // 各フェーズでのテスト実行
-        const phases = Object.values(this.migrationPhases);
-        
-        for (const phase of phases) {
-            console.log(`\n🔄 Phase: ${phase}`);
-            this.setMigrationPhase(phase);
-            
-            for (const user of testUsers) {
-                console.log(`\n👤 テストユーザー: ${user.name}`);
-                const result = await this.mapUser(user);
-                
-                console.log(`   結果: ${result.success ? '✅' : '❌'}`);
-                console.log(`   方法: ${result.mappingMethod}`);
-                console.log(`   処理時間: ${result.processingTime}ms`);
-                
-                if (result.success) {
-                    console.log(`   マッピング: ${result.slackUser.name} → ${result.esaUser.screen_name}`);
-                } else {
-                    console.log(`   エラー: ${result.error}`);
-                }
-                
-                if (result.fallbackUsed) {
-                    console.log(`   フォールバック使用: はい`);
-                }
-            }
-        }
-        
-        // テスト完了後のレポート生成
-        console.log('\n📊 テスト完了、レポート生成...');
-        await this.generateMigrationReport();
     }
 }
 
