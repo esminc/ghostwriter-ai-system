@@ -21,8 +21,8 @@ class MCPClientIntegration {
             // Slack MCP クライアントの初期化
             await this.initializeSlackMCP();
             
-            // esa MCP クライアントの初期化（将来用）
-            // await this.initializeEsaMCP();
+            // esa MCP クライアントの初期化
+            await this.initializeEsaMCP();
             
             this.isInitialized = true;
             console.log('✅ MCP統合システム初期化完了');
@@ -153,8 +153,93 @@ class MCPClientIntegration {
     }
     
     /**
-     * Method 3: グローバルインストール済みパッケージ使用（nvm環境対応版）
+     * 📚 esa MCP クライアント初期化（実装完了版）
      */
+    async initializeEsaMCP() {
+        console.log('📚 esa MCP クライアント初期化中...');
+        
+        try {
+            // 環境変数の確認（新旧両方をサポート）
+            const esaApiKey = process.env.ESA_API_KEY || process.env.ESA_ACCESS_TOKEN;
+            const esaTeamName = process.env.DEFAULT_ESA_TEAM || process.env.ESA_TEAM_NAME;
+            
+            if (!esaApiKey || !esaTeamName) {
+                console.warn('⚠️ esa環境変数が設定されていません');
+                console.warn('必要な環境変数: ESA_API_KEY (または ESA_ACCESS_TOKEN), DEFAULT_ESA_TEAM (または ESA_TEAM_NAME)');
+                this.esaMCPClient = null;
+                return { success: false, error: 'Missing environment variables' };
+            }
+            
+            console.log(`🔧 esa MCP統合設定: team=${esaTeamName}, token=${esaApiKey.substring(0, 8)}...`);
+            
+            // esa-mcp-server を使用してMCPクライアントを初期化
+            const { Client } = require("@modelcontextprotocol/sdk/client/index.js");
+            const { StdioClientTransport } = require("@modelcontextprotocol/sdk/client/stdio.js");
+            
+            const transport = new StdioClientTransport({
+                command: "/Users/takuya/.nvm/versions/node/v18.18.2/bin/npx",
+                args: ["-y", "esa-mcp-server@latest"],
+                env: {
+                    ...process.env,
+                    ESA_API_KEY: esaApiKey,
+                    DEFAULT_ESA_TEAM: esaTeamName
+                }
+            });
+            
+            this.esaMCPClient = new Client({
+                name: "ghostwriter-esa-client",
+                version: "1.0.0"
+            });
+            
+            console.log('🔌 esa MCPサーバーに接続中...');
+            await this.esaMCPClient.connect(transport);
+            
+            // 利用可能なツールを確認
+            const tools = await this.esaMCPClient.listTools();
+            console.log('🔧 利用可能なesa MCPツール:', tools.tools.map(t => t.name));
+            
+            // 接続テスト
+            const testResult = await this.testEsaConnection();
+            if (!testResult.success) {
+                throw new Error(`esa MCP接続テスト失敗: ${testResult.error}`);
+            }
+            
+            console.log('✅ esa MCP クライアント初期化成功');
+            return { success: true, tools: tools.tools.map(t => t.name) };
+            
+        } catch (error) {
+            console.error('❌ esa MCP初期化エラー:', error);
+            this.esaMCPClient = null;
+            return { success: false, error: error.message };
+        }
+    }
+    
+    /**
+     * 🧪 esa MCP接続テスト
+     */
+    async testEsaConnection() {
+        if (!this.esaMCPClient) {
+            return { success: false, error: 'esa MCP client not initialized' };
+        }
+        
+        try {
+            // 簡単な検索テストを実行
+            const testResult = await this.esaMCPClient.callTool({
+                name: "search_esa_posts",
+                arguments: {
+                    query: "AI代筆",
+                    perPage: 1
+                }
+            });
+            
+            console.log('🧪 esa MCP接続テスト成功');
+            return { success: true, result: testResult };
+            
+        } catch (error) {
+            console.error('❌ esa MCP接続テストエラー:', error);
+            return { success: false, error: error.message };
+        }
+    }
     async initWithGlobalPath() {
         const { Client } = require("@modelcontextprotocol/sdk/client/index.js");
         const { StdioClientTransport } = require("@modelcontextprotocol/sdk/client/stdio.js");
@@ -466,6 +551,138 @@ class MCPClientIntegration {
     }
     
     /**
+     * 📚 esa MCPレスポンス解析
+     */
+    parseEsaMCPResponse(result) {
+        try {
+            // MCP レスポンスの構造を解析
+            if (result && result.content) {
+                // コンテンツが配列の場合（通常のMCPレスポンス）
+                if (Array.isArray(result.content)) {
+                    if (result.content.length > 0 && result.content[0].text) {
+                        // テキストコンテンツをJSONとして解析
+                        const jsonStr = result.content[0].text;
+                        console.log('✅ esa MCPレスポンスJSON解析成功');
+                        return JSON.parse(jsonStr);
+                    }
+                }
+                // 直接オブジェクトの場合
+                else if (typeof result.content === 'object') {
+                    return result.content;
+                }
+                // 文字列の場合
+                else if (typeof result.content === 'string') {
+                    return JSON.parse(result.content);
+                }
+            }
+            
+            // 直接結果がJSONオブジェクトの場合
+            if (result && typeof result === 'object' && !result.content) {
+                return result;
+            }
+            
+            console.warn('⚠️ esa MCPレスポンス解析失敗: 予期しない構造', result);
+            return null;
+            
+        } catch (error) {
+            console.error('❌ esa MCP JSONレスポンス解析エラー:', error.message);
+            console.log('🔍 レスポンス構造:', typeof result, result);
+            return null;
+        }
+    }
+    
+    /**
+     * 🔍 esa記事検索（MCP経由）
+     */
+    async searchEsaPostsViaMCP(options = {}) {
+        console.log('🔍 MCP経由esa記事検索:', options);
+        
+        if (!this.esaMCPClient) {
+            return {
+                success: false,
+                error: 'esa MCP client not initialized'
+            };
+        }
+        
+        try {
+            const defaultOptions = {
+                query: 'AI代筆',
+                perPage: 20,
+                sort: 'updated',
+                order: 'desc',
+                ...options
+            };
+            
+            const result = await this.esaMCPClient.callTool({
+                name: "search_esa_posts",
+                arguments: defaultOptions
+            });
+            
+            const parsedData = this.parseEsaMCPResponse(result);
+            
+            if (parsedData && parsedData.posts) {
+                console.log(`✅ esa記事検索成功: ${parsedData.posts.length}件登録`);
+                return {
+                    success: true,
+                    posts: parsedData.posts,
+                    total_count: parsedData.total_count || parsedData.posts.length
+                };
+            } else {
+                throw new Error('Invalid esa search response format');
+            }
+            
+        } catch (error) {
+            console.error('❌ MCP経由esa検索エラー:', error);
+            return {
+                success: false,
+                error: error.message
+            };
+        }
+    }
+    
+    /**
+     * 📝 esa記事詳細取得（MCP経由）
+     */
+    async readEsaMultiplePostsViaMCP(postNumbers) {
+        console.log('📝 MCP経由esa記事詳細取得:', postNumbers);
+        
+        if (!this.esaMCPClient) {
+            return {
+                success: false,
+                error: 'esa MCP client not initialized'
+            };
+        }
+        
+        try {
+            const result = await this.esaMCPClient.callTool({
+                name: "read_esa_multiple_posts",
+                arguments: {
+                    postNumbers: postNumbers
+                }
+            });
+            
+            const parsedData = this.parseEsaMCPResponse(result);
+            
+            if (parsedData && parsedData.posts) {
+                console.log(`✅ esa記事詳細取得成功: ${parsedData.posts.length}件`);
+                return {
+                    success: true,
+                    posts: parsedData.posts
+                };
+            } else {
+                throw new Error('Invalid esa multiple posts response format');
+            }
+            
+        } catch (error) {
+            console.error('❌ MCP経由esa詳細取得エラー:', error);
+            return {
+                success: false,
+                error: error.message
+            };
+        }
+    }
+    
+    /**
      * 🔄 Slackフォールバックデータ生成
      */
     getSlackFallbackData(userName, reason) {
@@ -557,7 +774,11 @@ class MCPClientIntegration {
             }
             
             if (this.esaMCPClient) {
-                await this.esaMCPClient.close();
+                try {
+                    await this.esaMCPClient.close();
+                } catch (error) {
+                    console.warn('⚠️ esa MCPクライアントクローズエラー:', error.message);
+                }
                 this.esaMCPClient = null;
             }
             
