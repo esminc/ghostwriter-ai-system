@@ -466,7 +466,7 @@ class MigrationManager {
     }
 
     /**
-     * esaメンバー情報を取得（キャッシュ付き）
+     * esaメンバー情報を取得（MCP経由）
      */
     async getEsaMembers() {
         const now = Date.now();
@@ -479,26 +479,116 @@ class MigrationManager {
             return this.esaMembers;
         }
 
-        console.log('🔄 esaメンバー情報を取得中...');
+        console.log('🔄 MCP経由でesaメンバー情報を取得中...');
         
         try {
-            const EsaAPI = require('./esa-api');
-            const esaAPI = new EsaAPI(process.env.ESA_TEAM_NAME, process.env.ESA_ACCESS_TOKEN);
-            const result = await esaAPI.getMembers();
+            // MCP統合版を使用してメンバー情報取得
+            const MCPConnectionManager = require('../mcp-integration/mcp-connection-manager');
+            const mcpManager = MCPConnectionManager.getInstance();
             
-            if (result.success) {
-                this.esaMembers = result.members;
-                this.lastCacheUpdate = now;
-                
-                console.log(`✅ esaメンバー情報取得成功: ${this.esaMembers.length}人`);
-                
-                return this.esaMembers;
+            console.log('🔄 MCPConnectionManager: 既存インスタンスを使用');
+            
+            // MCP初期化状態確認（既に初期化済みの場合はスキップ）
+            if (!mcpManager.isInitialized) {
+                console.log('🔄 MCP初期化中...');
+                const initResult = await mcpManager.initialize();
+                if (!initResult.success) {
+                    throw new Error(`MCP初期化失敗: ${initResult.error || 'Unknown error'}`);
+                }
             } else {
-                console.error('❌ esaメンバー情報取得失敗:', result.error);
+                console.log('✅ MCPConnectionManager: 既に初期化済み - 重複初期化をスキップ');
+            }
+            
+            // esa接続取得
+            const esaConnection = await mcpManager.getConnection('esa');
+            if (!esaConnection) {
+                throw new Error('esa MCP接続が利用できません');
+            }
+            
+            console.log('✅ esa MCP接続取得成功 - 接続プール使用');
+            
+            // esa投稿からメンバー情報を抽出
+            // 複数のページから投稿を検索してメンバー情報を収集
+            const memberSet = new Set();
+            const members = [];
+            
+            // 最新の投稿から複数ページ分取得してメンバー情報を抽出
+            for (let page = 1; page <= 5; page++) {
+                try {
+                    const result = await esaConnection.callTool({
+                        name: 'search_esa_posts',
+                        arguments: {
+                            query: '', // 空文字列で全投稿を対象
+                            perPage: 100,
+                            page: page,
+                            sort: 'updated'
+                        }
+                    });
+                    
+                    // MCPツール結果のcontentを取得
+                    const searchResult = result.content && result.content[0] ? 
+                        JSON.parse(result.content[0].text) : null;
+                    
+                    if (!searchResult || !searchResult.posts || searchResult.posts.length === 0) {
+                        console.log(`📄 ページ ${page}: 投稿なし、検索終了`);
+                        break;
+                    }
+                    
+                    // 投稿からメンバー情報を抽出
+                    searchResult.posts.forEach(post => {
+                        // created_by メンバー情報
+                        if (post.created_by) {
+                            const memberKey = post.created_by.screen_name;
+                            if (memberKey && !memberSet.has(memberKey)) {
+                                memberSet.add(memberKey);
+                                members.push({
+                                    screen_name: post.created_by.screen_name,
+                                    name: post.created_by.name,
+                                    email: null, // esa投稿データにはメールアドレスが含まれない
+                                    icon: post.created_by.icon
+                                });
+                            }
+                        }
+                        
+                        // updated_by メンバー情報（作成者と異なる場合）
+                        if (post.updated_by && post.updated_by.screen_name !== post.created_by?.screen_name) {
+                            const memberKey = post.updated_by.screen_name;
+                            if (memberKey && !memberSet.has(memberKey)) {
+                                memberSet.add(memberKey);
+                                members.push({
+                                    screen_name: post.updated_by.screen_name,
+                                    name: post.updated_by.name,
+                                    email: null,
+                                    icon: post.updated_by.icon
+                                });
+                            }
+                        }
+                    });
+                    
+                    console.log(`📄 ページ ${page}: ${searchResult.posts.length}投稿から ${memberSet.size}メンバー収集`);
+                    
+                } catch (pageError) {
+                    console.error(`❌ ページ ${page} 取得エラー:`, pageError.message);
+                    break;
+                }
+            }
+            
+            if (members.length === 0) {
+                console.log('⚠️ esaメンバー情報が見つかりませんでした');
                 return null;
             }
+            
+            console.log(`✅ esaメンバー情報取得成功: ${members.length}人のメンバー`);
+            console.log('📋 取得されたメンバー:', members.map(m => ({screen_name: m.screen_name, name: m.name})));
+            
+            // キャッシュ更新
+            this.esaMembers = members;
+            this.lastCacheUpdate = now;
+            
+            return members;
+            
         } catch (error) {
-            console.error('❌ esaメンバー取得エラー:', error);
+            console.error('❌ MCP経由esaメンバー取得エラー:', error);
             return null;
         }
     }

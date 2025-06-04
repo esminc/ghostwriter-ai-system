@@ -7,7 +7,7 @@ const path = require('path');
 // MCP統合版サービスをインポート
 const MCPProfileAnalyzer = require('../services/mcp-profile-analyzer');
 const AIDiaryGenerator = require('../services/ai-diary-generator');
-const EsaAPI = require('../services/esa-api');
+// const EsaAPI = require('../services/esa-api'); // MCP統合により削除
 const MigrationManager = require('../services/migration-manager');
 const { initDatabase } = require('../database/init');
 
@@ -46,20 +46,20 @@ class GhostWriterSlackBot {
             receiver: this.receiver
         });
 
-        // サービスの初期化
-        console.log('🔧 esa API初期化:', {
+        // サービスの初期化 - MCP完全統合版
+        console.log('🔧 Phase 5.3完全統一版 + MCP完全統合システム初期化:', {
             teamName: process.env.ESA_TEAM_NAME,
             hasAccessToken: !!process.env.ESA_ACCESS_TOKEN,
-            tokenPrefix: process.env.ESA_ACCESS_TOKEN ? process.env.ESA_ACCESS_TOKEN.substring(0, 10) + '...' : 'NONE'
+            mcpIntegration: 'complete'
         });
         
         this.profileAnalyzer = new MCPProfileAnalyzer();
         this.diaryGenerator = new AIDiaryGenerator();
-        this.esaAPI = new EsaAPI(process.env.ESA_TEAM_NAME, process.env.ESA_ACCESS_TOKEN);
+        // this.esaAPI = new EsaAPI(process.env.ESA_TEAM_NAME, process.env.ESA_ACCESS_TOKEN); // MCP統合により削除
         this.migrationManager = new MigrationManager();
         
-        // Phase 5: MCP統合完全移行で開始（従来API廃止）
-        console.log('🚀 Phase 5: MCP統合完全移行完了 - esa API直接アクセス廃止');
+        // Phase 5.3: MCP完全統合による従来API完全廃止
+        console.log('🚀 Phase 5.3: MCP完全統合実装完了 - 従来API依存完全排除');
 
         // イベントハンドラーの設定
         this.setupEventHandlers();
@@ -250,6 +250,17 @@ class GhostWriterSlackBot {
                         processingTime: mappingResult.processingTime,
                         fallback: esaScreenName
                     });
+                    
+                    // フォールバック使用時もmappingResultを作成
+                    mappingResult = {
+                        success: false,
+                        mappingMethod: 'fallback_username',
+                        confidence: 0.5,
+                        fallbackUsed: true,
+                        processingTime: mappingResult.processingTime || 0,
+                        slackUser: { name: userName },
+                        esaUser: { screen_name: esaScreenName }
+                    };
                 }
             } catch (userInfoError) {
                 console.log(`⚠️ Slackユーザー情報取得エラー: ${userInfoError.message}`);
@@ -377,7 +388,7 @@ class GhostWriterSlackBot {
         const userId = body.user.id;
         const userName = body.user.name;
         
-        console.log(`🚀 Posting to esa for user: ${userName}`);
+        console.log(`🚀 MCP経由esa投稿 for user: ${userName}`);
         console.log('📋 Button value:', body.actions[0].value);
         
         try {
@@ -405,43 +416,37 @@ class GhostWriterSlackBot {
                 throw new Error('タイトルまたは内容が不足しています');
             }
             
-            // esa APIを使って実際に投稿
-            console.log('📡 Posting to esa API...');
+            // Phase 5.3完全統一版を使用してMCP経由esa投稿
+            console.log('📡 Phase 5.3完全統一版 MCP経由esa投稿実行中...');
             
-            // テストフォルダに投稿するためのカテゴリ設定
-            const today = new Date();
-            const dateStr = today.toISOString().split('T')[0];
-            const [year, month, day] = dateStr.split('-');
-            const testCategory = `テスト/日記/${year}/${month}/${day}`;
+            const LLMDiaryGeneratorPhase53Unified = require('../mcp-integration/llm-diary-generator-phase53-unified');
+            const mcpGenerator = new LLMDiaryGeneratorPhase53Unified();
             
-            // 🔍 デバッグ: esa投稿前の最終確認
-            console.log('🔍 Pre-esa post debug:', {
+            // 🔍 デバッグ: MCP経由esa投稿前の最終確認
+            console.log('🔍 Pre-MCP esa post debug:', {
                 diaryTitle: diary.title,
                 diaryTitleType: typeof diary.title,
                 userName: userName,
-                esaPostName: diary.title
+                mcpSystemId: mcpGenerator.systemId
             });
             
-            const result = await this.esaAPI.createPost({
-                name: diary.title,
-                body_md: diary.content,
-                category: testCategory,
-                wip: true,  // WIP状態に変更
-                message: `🤖 AI代筆システム - 対象ユーザー: ${userName}`,
-                user: 'esa_bot'  // 共通投稿者アカウント使用
+            const result = await mcpGenerator.postToEsaWithMCP(diary, {
+                targetUser: userName,
+                slackUserId: userId,
+                postingMethod: 'mcp_integrated'
             });
             
-            console.log('✅ esa API response:', result);
+            console.log('✅ MCP経由esa API response:', result);
             
-            // esa APIの成功/失敗チェック
+            // MCP経由esa投稿の成功/失敗チェック
             if (!result.success) {
-                throw new Error(`esa投稿失敗: ${result.error}`);
+                throw new Error(`MCP経由esa投稿失敗: ${result.error}`);
             }
             
             // URLとnumberの存在確認
             if (!result.url || !result.number) {
-                console.error('❌ esa API response missing required fields:', result);
-                throw new Error('esa APIからのレスポンスに必要な情報が不足しています');
+                console.error('❌ MCP経由esa API response missing required fields:', result);
+                throw new Error('MCP経由esa APIからのレスポンスに必要な情報が不足しています');
             }
             
             // 投稿履歴をデータベースに保存
@@ -458,10 +463,10 @@ class GhostWriterSlackBot {
                     esa_post_url: result.url,
                     quality_score: diary.qualityScore || null,
                     is_ai_generated: true,
-                    generation_method: 'slack_bot'
+                    generation_method: 'mcp_integrated_slack_bot'
                 });
                 
-                console.log('💾 History saved to database');
+                console.log('💾 History saved to database (MCP経由)');
             } catch (dbError) {
                 console.error('⚠️ Database save error (non-critical):', dbError);
                 // データベースエラーは非致命的なので継続
@@ -469,7 +474,7 @@ class GhostWriterSlackBot {
             
             // 成功メッセージ
             await respond({
-                text: '✅ esa投稿完了！',
+                text: '✅ MCP経由esa投稿完了！',
                 blocks: [
                     {
                         type: 'section',
@@ -506,14 +511,14 @@ class GhostWriterSlackBot {
                 response_type: 'ephemeral'
             });
             
-            console.log(`✅ Successfully posted to esa: ${result.url}`);
+            console.log(`✅ Successfully posted to esa via MCP: ${result.url}`);
             
         } catch (error) {
-            console.error('❌ Error posting to esa:', error);
+            console.error('❌ Error posting to esa via MCP:', error);
             console.error('❌ Error stack:', error.stack);
             
             await respond({
-                text: `❌ esa投稿でエラーが発生しました\n\n**エラー:** ${error.message}\n\nデバッグ情報がログに記録されました。`,
+                text: `❌ MCP経由esa投稿でエラーが発生しました\n\n**エラー:** ${error.message}\n\nデバッグ情報がログに記録されました。`,
                 replace_original: true,
                 response_type: 'ephemeral'
             });

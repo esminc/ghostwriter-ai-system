@@ -402,4 +402,17 @@ class MCPConnectionManager {
 // シングルトンインスタンス管理
 MCPConnectionManager.instance = null;
 
+/**
+ * 🎯 シングルトンインスタンス取得メソッド
+ */
+MCPConnectionManager.getInstance = function() {
+    if (!MCPConnectionManager.instance) {
+        console.log('🆕 MCPConnectionManager: 新しいインスタンスを作成');
+        MCPConnectionManager.instance = new MCPConnectionManager();
+    } else {
+        console.log('🔄 MCPConnectionManager: 既存インスタンスを返却');
+    }
+    return MCPConnectionManager.instance;
+};
+
 module.exports = MCPConnectionManager;
