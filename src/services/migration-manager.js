@@ -466,7 +466,7 @@ class MigrationManager {
     }
 
     /**
-     * esaメンバー情報を取得（MCP経由）
+     * esaメンバー情報を取得（新MCP経由 - kajirita2002版）
      */
     async getEsaMembers() {
         const now = Date.now();
@@ -479,7 +479,7 @@ class MigrationManager {
             return this.esaMembers;
         }
 
-        console.log('🔄 MCP経由でesaメンバー情報を取得中...');
+        console.log('🔄 新MCP経由でesaメンバー情報を取得中...');
         
         try {
             // MCP統合版を使用してメンバー情報取得
@@ -505,71 +505,58 @@ class MigrationManager {
                 throw new Error('esa MCP接続が利用できません');
             }
             
-            console.log('✅ esa MCP接続取得成功 - 接続プール使用');
+            console.log('✅ esa MCP接続取得成功 - 新MCPサーバー使用');
             
-            // esa投稿からメンバー情報を抽出
-            // 複数のページから投稿を検索してメンバー情報を収集
-            const memberSet = new Set();
+            // 🌟 新機能: esa_get_members でメンバー情報を直接取得
             const members = [];
+            let page = 1;
+            let hasMorePages = true;
             
-            // 最新の投稿から複数ページ分取得してメンバー情報を抽出
-            for (let page = 1; page <= 5; page++) {
+            while (hasMorePages && page <= 10) { // 最大10ページまで
                 try {
+                    console.log(`📋 メンバー情報取得中... ページ ${page}`);
+                    
                     const result = await esaConnection.callTool({
-                        name: 'search_esa_posts',
+                        name: 'esa_get_members',
                         arguments: {
-                            query: '', // 空文字列で全投稿を対象
-                            perPage: 100,
                             page: page,
-                            sort: 'updated'
+                            per_page: 100
                         }
                     });
                     
                     // MCPツール結果のcontentを取得
-                    const searchResult = result.content && result.content[0] ? 
+                    const membersResult = result.content && result.content[0] ? 
                         JSON.parse(result.content[0].text) : null;
                     
-                    if (!searchResult || !searchResult.posts || searchResult.posts.length === 0) {
-                        console.log(`📄 ページ ${page}: 投稿なし、検索終了`);
+                    if (!membersResult || !membersResult.members || membersResult.members.length === 0) {
+                        console.log(`📄 ページ ${page}: メンバーなし、取得終了`);
+                        hasMorePages = false;
                         break;
                     }
                     
-                    // 投稿からメンバー情報を抽出
-                    searchResult.posts.forEach(post => {
-                        // created_by メンバー情報
-                        if (post.created_by) {
-                            const memberKey = post.created_by.screen_name;
-                            if (memberKey && !memberSet.has(memberKey)) {
-                                memberSet.add(memberKey);
-                                members.push({
-                                    screen_name: post.created_by.screen_name,
-                                    name: post.created_by.name,
-                                    email: null, // esa投稿データにはメールアドレスが含まれない
-                                    icon: post.created_by.icon
-                                });
-                            }
-                        }
-                        
-                        // updated_by メンバー情報（作成者と異なる場合）
-                        if (post.updated_by && post.updated_by.screen_name !== post.created_by?.screen_name) {
-                            const memberKey = post.updated_by.screen_name;
-                            if (memberKey && !memberSet.has(memberKey)) {
-                                memberSet.add(memberKey);
-                                members.push({
-                                    screen_name: post.updated_by.screen_name,
-                                    name: post.updated_by.name,
-                                    email: null,
-                                    icon: post.updated_by.icon
-                                });
-                            }
-                        }
+                    // メンバー情報を処理（メールアドレス付き！）
+                    membersResult.members.forEach(member => {
+                        members.push({
+                            screen_name: member.screen_name,
+                            name: member.name,
+                            email: member.email || null, // 🎉 メールアドレス取得可能！
+                            icon: member.icon,
+                            id: member.id
+                        });
                     });
                     
-                    console.log(`📄 ページ ${page}: ${searchResult.posts.length}投稿から ${memberSet.size}メンバー収集`);
+                    console.log(`📄 ページ ${page}: ${membersResult.members.length}メンバー取得`);
+                    
+                    // 次のページがあるかチェック
+                    if (membersResult.members.length < 100) {
+                        hasMorePages = false;
+                    } else {
+                        page++;
+                    }
                     
                 } catch (pageError) {
                     console.error(`❌ ページ ${page} 取得エラー:`, pageError.message);
-                    break;
+                    hasMorePages = false;
                 }
             }
             
@@ -578,8 +565,8 @@ class MigrationManager {
                 return null;
             }
             
-            console.log(`✅ esaメンバー情報取得成功: ${members.length}人のメンバー`);
-            console.log('📋 取得されたメンバー:', members.map(m => ({screen_name: m.screen_name, name: m.name})));
+            console.log(`🎉 esaメンバー情報取得成功: ${members.length}人のメンバー（メールアドレス付き）`);
+            console.log('📧 メールアドレス付きメンバー:', members.filter(m => m.email).map(m => ({screen_name: m.screen_name, email: m.email})));
             
             // キャッシュ更新
             this.esaMembers = members;
@@ -588,7 +575,7 @@ class MigrationManager {
             return members;
             
         } catch (error) {
-            console.error('❌ MCP経由esaメンバー取得エラー:', error);
+            console.error('❌ 新MCP経由esaメンバー取得エラー:', error);
             return null;
         }
     }

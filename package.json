@@ -20,7 +20,7 @@
     "test:user": "node test-user-normalization.js",
     "test:improved": "node test-improved-user-search.js",
     "test:mapping": "node test-user-mapping.js",
-    "test:auto-mapping": "node test-auto-mapping.js",
+    "test:mapping": "node tests/test-new-esa-mcp-mapping.js",
     "test:strategy-b": "node test-strategy-b-improved.js",
     "mcp:test": "node src/mcp-integration/test-mcp-system.js",
     "mcp:start": "node src/mcp-integration/start-mcp-system.js",

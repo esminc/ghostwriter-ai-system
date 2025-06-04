@@ -184,9 +184,9 @@ class MCPConnectionManager {
         console.log(`📚 esa MCP接続初期化中... (試行回数: ${this.initializationAttempts.esa}/${this.maxRetries})`);
         
         try {
-            // 環境変数確認
-            const esaApiKey = process.env.ESA_API_KEY || process.env.ESA_ACCESS_TOKEN;
-            const esaTeamName = process.env.DEFAULT_ESA_TEAM || process.env.ESA_TEAM_NAME;
+            // 環境変数確認（新MCPサーバー対応）
+            const esaApiKey = process.env.ESA_ACCESS_TOKEN || process.env.ESA_API_KEY;
+            const esaTeamName = process.env.ESA_TEAM || process.env.DEFAULT_ESA_TEAM || process.env.ESA_TEAM_NAME;
             
             if (!esaApiKey || !esaTeamName) {
                 throw new Error('esa環境変数が設定されていません');
@@ -198,11 +198,11 @@ class MCPConnectionManager {
             // 🔧 Phase 5.2最適化: 接続設定の統一
             const transport = new StdioClientTransport({
                 command: "/Users/takuya/.nvm/versions/node/v18.18.2/bin/npx",
-                args: ["-y", "esa-mcp-server@latest"],
+                args: ["-y", "@kajirita2002/esa-mcp-server"],
                 env: {
                     ...process.env,
-                    ESA_API_KEY: esaApiKey,
-                    DEFAULT_ESA_TEAM: esaTeamName
+                    ESA_ACCESS_TOKEN: esaApiKey,
+                    ESA_TEAM: esaTeamName
                 }
             });
             
