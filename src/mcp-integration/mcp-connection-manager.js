@@ -240,9 +240,8 @@ class MCPConnectionManager {
         
         try {
             await this.connections.esa.callTool({
-                name: "search_esa_posts",
+                name: "esa_list_posts",
                 arguments: {
-                    query: "test",
                     perPage: 1
                 }
             });
