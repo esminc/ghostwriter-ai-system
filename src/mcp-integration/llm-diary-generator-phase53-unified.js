@@ -274,17 +274,22 @@ class LLMDiaryGeneratorPhase53Unified {
         console.log(`✅ AI日記生成完了: ${content.length}文字`);
         
         const today = new Date();
-        const dateStr = today.toLocaleDateString('ja-JP', {
-            month: '2-digit', day: '2-digit'
-        });
         
         // 🎯 日本語表記のタイトル生成
         const displayName = this.getJapaneseDisplayName(userName, contextData);
         
+        // 🎯 実際の活動内容に基づくタイトル生成
+        const contentSummary = this.generateContentSummary(contextData, userName);
+        
+        // 🎯 年月日フォルダ構成のカテゴリ生成
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const day = String(today.getDate()).padStart(2, '0');
+        
         return {
-            title: `【代筆】${displayName}: ${dateStr}の振り返り`,
+            title: `【代筆】${displayName}: ${contentSummary}`,
             content: content,
-            category: 'AI代筆日記',
+            category: `AI代筆日記/${year}/${month}/${day}`,
             qualityScore: 5
         };
     }
@@ -371,6 +376,41 @@ class LLMDiaryGeneratorPhase53Unified {
         
         console.log(`⚠️ 日本語表記名が見つからないため、元の名前を使用: ${userName}`);
         return userName;
+    }
+    
+    // 🎯 実装: 内容に基づくタイトル要約生成
+    generateContentSummary(contextData, userName) {
+        const profileAnalysis = contextData.esaData?.profileAnalysis;
+        const hasProfileData = profileAnalysis && profileAnalysis.status === 'analyzed';
+        
+        if (hasProfileData && profileAnalysis.categories) {
+            // ユーザーの過去の投稿カテゴリに基づいた活動推測
+            const categories = profileAnalysis.categories.filter(cat => 
+                !cat.includes('AI代筆日記') && !cat.includes('Phase') && !cat.includes('MCP')
+            );
+            
+            if (categories.length > 0) {
+                const mainCategory = categories[0];
+                if (mainCategory.includes('開発') || mainCategory.includes('プログラム')) {
+                    return 'システム開発の大きな進歩';
+                } else if (mainCategory.includes('日記') || mainCategory.includes('記録')) {
+                    return '日々の活動と成長記録';
+                } else if (mainCategory.includes('学習') || mainCategory.includes('勉強')) {
+                    return '継続的な学習と発見';
+                } else if (mainCategory.includes('会議') || mainCategory.includes('打ち合わせ')) {
+                    return 'チームワークと協力の一日';
+                } else {
+                    return `${mainCategory}での着実な進展`;
+                }
+            }
+        }
+        
+        // デフォルトのタイトル（日付ベース）
+        const today = new Date();
+        const dateStr = today.toLocaleDateString('ja-JP', {
+            month: '2-digit', day: '2-digit'
+        });
+        return `${dateStr}の振り返り`;
     }
 
     // ✅ 実装: 開発システム情報を除外した品質情報フッター
@@ -497,10 +537,8 @@ class LLMDiaryGeneratorPhase53Unified {
             const esaConnection = await this.mcpManager.getConnection('esa');
             if (!esaConnection) throw new Error('esa MCP接続が利用できません');
 
-            const today = new Date();
-            const dateStr = today.toISOString().split('T')[0];
-            const [year, month, day] = dateStr.split('-');
-            const finalCategory = diaryData.category || `AI代筆日記/${year}/${month}/${day}`;
+            // 🎯 修正: カテゴリが既に年月日を含んでいる場合はそのまま使用
+            const finalCategory = diaryData.category; // AI代筆日記/YYYY/MM/DD 形式で既に設定済み
             
             try {
                 console.log(`📡 MCP経由esa投稿実行中（user属性: esa_bot）...`);
