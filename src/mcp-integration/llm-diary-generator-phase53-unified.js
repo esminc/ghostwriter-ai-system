@@ -461,7 +461,7 @@ class LLMDiaryGeneratorPhase53Unified {
         // 🆕 Slackデータの統合分析
         const slackData = contextData.slackData;
         const hasSlackData = slackData && slackData.dataSource !== 'error' && slackData.todayMessages?.length > 0;
-        const isRealSlackData = slackData?.dataSource === 'real_slack_mcp_direct';
+        const isRealSlackData = slackData?.dataSource === 'real_slack_mcp_multi_channel';
         
         console.log(`📝 統合日記生成: esa=${hasProfileData}, slack=${hasSlackData}(${slackData?.dataSource || 'none'})`);
         
@@ -654,7 +654,7 @@ class LLMDiaryGeneratorPhase53Unified {
         // 🆕 Slackデータ統合情報
         const slackData = contextData.slackData;
         const hasSlackData = slackData && slackData.dataSource !== 'error';
-        const isRealSlackData = slackData?.dataSource === 'real_slack_mcp_direct';
+        const isRealSlackData = slackData?.dataSource === 'real_slack_mcp_multi_channel';
         
         let footer = `\n\n---\n\n`;
         
