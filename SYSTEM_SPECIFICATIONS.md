@@ -278,7 +278,8 @@ src/
 - `generatePersonalizedDiaryContent()` - 個人化コンテンツ生成
 - `generateCleanQualityFooter()` - 品質フッター生成
 - `postToEsaWithMCP()` - esa投稿処理
-- **非推奨**: `generatePhase53EmergencyFallback()` - フォールバック日記生成（使用非推奨）
+- `identifyProcessingStage()` - エラー研究データ収集（新規）
+- **廃止済み**: `generatePhase53EmergencyFallback()` - フォールバック日記生成（仕様違反のため削除）
 
 ### 最新の修正履歴
 - **2025-06-05**: 開発チャット情報混入問題完全解決

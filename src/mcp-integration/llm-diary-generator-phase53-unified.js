@@ -1,7 +1,9 @@
-// Phase 5.3完全統一版 - 重要修正版: user属性とプロフィール分析対応
-// 🚨 修正内容:
+// AI代筆システム - ユーザープロフィール分析対応版
+// ✅ 修正内容:
 // 1. MCP投稿でuser属性を指定してesa_botに変更
 // 2. プロフィール分析で投稿者自身の過去記事を取得
+// 3. 禁止用語の除去
+// 4. 3セクション構造の修正
 
 const OpenAIClient = require('../ai/openai-client');
 const MCPConnectionManager = require('./mcp-connection-manager');
@@ -12,16 +14,16 @@ class LLMDiaryGeneratorPhase53Unified {
         this.mcpManager = null;
         this.isInitialized = false;
         
-        this.systemVersion = 'Phase 5.3完全統一版 + MCP完全統合 + 修正版';
-        this.systemId = 'phase-5-3-unified-mcp-fixed-' + Date.now();
+        this.systemVersion = 'AI代筆システム';
+        this.systemId = 'ai-diary-system-' + Date.now();
         
-        console.log('🎯 Phase 5.3完全統一版 + MCP完全統合 + 修正版システム初期化開始...');
+        console.log('🎯 AI代筆システム初期化開始...');
         console.log('🚨 修正内容: user属性指定 + プロフィール分析対応');
     }
     
     async initialize() {
         if (this.isInitialized) {
-            console.log('✅ Phase 5.3完全統一版: 既に初期化済み');
+            console.log('✅ AI代筆システム: 既に初期化済み');
             return { success: true, already_initialized: true };
         }
         
@@ -34,16 +36,16 @@ class LLMDiaryGeneratorPhase53Unified {
                 success: true,
                 components: { mcp_manager: mcpResult.success, openai_client: true },
                 connections: mcpResult.connections,
-                phase: '5.3_unified_mcp_fixed'
+                phase: 'ai_diary_system'
             };
         } catch (error) {
-            console.error('❌ Phase 5.3完全統一版システム初期化エラー:', error);
+            console.error('❌ AI代筆システム初期化エラー:', error);
             return { success: false, error: error.message };
         }
     }
 
     async generateDiaryWithMCP(userName, options = {}) {
-        console.log(`🎯 Phase 5.3完全統一版 + 修正版日記生成開始: ${userName}`);
+        console.log(`🎯 AI代筆日記生成開始: ${userName}`);
         console.log(`🚨 修正内容: user属性指定 + プロフィール分析対応`);
         
         try {
@@ -56,7 +58,7 @@ class LLMDiaryGeneratorPhase53Unified {
             const aiDiary = await this.generateAIDiary(userName, contextData, options);
 
             const finalDiary = {
-                title: aiDiary.title || `【代筆】${userName}: Phase 5.3完全統一版による日記`,
+                title: aiDiary.title || `【代筆】${userName}: 日記`,
                 content: aiDiary.content,
                 category: aiDiary.category || 'AI代筆日記',
                 qualityScore: aiDiary.qualityScore || 5
@@ -66,28 +68,35 @@ class LLMDiaryGeneratorPhase53Unified {
                 success: true,
                 diary: finalDiary,
                 metadata: {
-                    processing_method: 'phase_5_3_unified_mcp_fixed',
+                    processing_method: 'ai_diary_system',
                     generation_time: new Date().toISOString(),
                     user_profile_analysis: contextData.userProfileAnalysis || 'enabled'
                 }
             };
         } catch (error) {
-            console.error('❌ Phase 5.3完全統一版日記生成エラー:', error);
+            console.error('❌ 日記生成エラー:', error);
+            
+            // 🚨 仕様変更: フォールバック廃止、失敗透明性100%
             return {
                 success: false,
                 error: error.message,
-                fallback_diary: this.generatePhase53EmergencyFallback(userName, error.message)
+                failure_details: {
+                    timestamp: new Date().toISOString(),
+                    user: userName,
+                    error_type: error.name || 'GenerationError',
+                    processing_stage: this.identifyProcessingStage(error)
+                },
+                research_data: {
+                    note: '研究実験中のエラーです。フォールバックは行いません。',
+                    transparency: '100%',
+                    fallback_policy: 'disabled'
+                }
             };
         }
     }
 
     async getUnifiedContextData(userName, options = {}) {
         console.log(`📚 ユーザー固有のプロフィール分析を実行: ${userName}`);
-        console.log(`🔧 MCPマネージャー状態:`, {
-            exists: !!this.mcpManager,
-            connections: this.mcpManager?.connections,
-            esaConnection: this.mcpManager?.connections?.esa
-        });
         
         try {
             const sources = [];
@@ -101,17 +110,7 @@ class LLMDiaryGeneratorPhase53Unified {
 
             if (this.mcpManager && this.mcpManager.connections?.esa) {
                 try {
-                    console.log(`📝 ${userName}の過去記事データ取得中...`);
-                    console.log(`🚀 getUserSpecificEsaData呼び出し開始`);
-                    
                     const userEsaData = await this.getUserSpecificEsaData(userName);
-                    
-                    console.log(`📤 getUserSpecificEsaData結果:`, {
-                        status: userEsaData.status,
-                        postsCount: userEsaData.postsCount,
-                        uniquePostsCount: userEsaData.uniquePostsCount,
-                        hasProfileAnalysis: !!userEsaData.profileAnalysis
-                    });
                     
                     sources.push('esa_mcp_user_specific');
                     contextData.esaData = userEsaData;
@@ -120,7 +119,6 @@ class LLMDiaryGeneratorPhase53Unified {
                     console.log(`✅ ${userName}の過去記事分析完了: ${userEsaData.postsCount || 0}件`);
                 } catch (esaError) {
                     console.log(`⚠️ ${userName}のesa データ取得エラー: ${esaError.message}`);
-                    console.log(`🔍 esaエラー詳細:`, esaError);
                     contextData.userProfileAnalysis = 'esa_analysis_failed';
                     contextData.esaErrorDetails = {
                         message: esaError.message,
@@ -129,27 +127,12 @@ class LLMDiaryGeneratorPhase53Unified {
                 }
             } else {
                 console.log(`❌ MCPマネージャーまたはesa接続が利用できません`);
-                console.log(`📊 MCP状態詳細:`, {
-                    mcpManagerExists: !!this.mcpManager,
-                    connections: this.mcpManager?.connections || 'null',
-                    esaConnectionStatus: this.mcpManager?.connections?.esa || 'not_connected'
-                });
                 contextData.userProfileAnalysis = 'mcp_not_available';
             }
 
-            console.log(`🎯 統合コンテキストデータ生成完了:`, {
-                userName: contextData.userName,
-                sources: contextData.sources,
-                userProfileAnalysis: contextData.userProfileAnalysis,
-                esaDataStatus: contextData.esaData?.status || 'none'
-            });
             return contextData;
         } catch (error) {
             console.error(`❌ 統合コンテキストデータ取得エラー:`, error);
-            console.log(`🔍 コンテキストエラー詳細:`, {
-                message: error.message,
-                stack: error.stack?.split('\n').slice(0, 3)
-            });
             return {
                 userName: userName,
                 sources: ['fallback'],
@@ -161,16 +144,12 @@ class LLMDiaryGeneratorPhase53Unified {
 
     async getUserSpecificEsaData(userName) {
         console.log(`🔍 ${userName}の過去記事検索中...`);
-        console.log(`📊 プロフィール分析デバッグ開始: ${userName}`);
         
         try {
-            console.log(`🔗 MCP接続状態確認中...`);
             const esaConnection = await this.mcpManager.getConnection('esa');
             if (!esaConnection) {
-                console.log(`❌ esa MCP接続が利用できません - プロフィール分析スキップ`);
                 throw new Error('esa MCP接続が利用できません');
             }
-            console.log(`✅ esa MCP接続確認済み`);
 
             const searchQueries = [
                 `user:${userName}`,
@@ -178,7 +157,6 @@ class LLMDiaryGeneratorPhase53Unified {
                 `author:${userName}`,
                 `updated_by:${userName}`
             ];
-            console.log(`🎯 検索クエリ一覧:`, searchQueries);
 
             let allPosts = [];
             let postsCount = 0;
@@ -186,9 +164,6 @@ class LLMDiaryGeneratorPhase53Unified {
 
             for (const query of searchQueries) {
                 try {
-                    console.log(`🔍 検索クエリ実行: "${query}"`);
-                    console.log(`📡 MCP検索リクエスト送信中...`);
-                    
                     const searchResult = await esaConnection.callTool({
                         name: 'esa_list_posts',
                         arguments: {
@@ -199,28 +174,10 @@ class LLMDiaryGeneratorPhase53Unified {
                         }
                     });
 
-                    console.log(`📥 MCP検索レスポンス受信:`, {
-                        hasContent: !!searchResult.content,
-                        contentLength: searchResult.content ? searchResult.content.length : 0
-                    });
-
                     if (searchResult.content && searchResult.content[0]) {
-                        console.log(`📝 レスポンス解析中...`);
                         const searchData = JSON.parse(searchResult.content[0].text);
-                        console.log(`📊 解析結果:`, {
-                            hasPosts: !!searchData.posts,
-                            postsLength: searchData.posts ? searchData.posts.length : 0,
-                            totalCount: searchData.total_count || 0
-                        });
                         
                         if (searchData.posts && searchData.posts.length > 0) {
-                            console.log(`✅ "${query}"で${searchData.posts.length}件取得`);
-                            
-                            // 取得した記事の詳細をログ出力
-                            searchData.posts.slice(0, 3).forEach((post, index) => {
-                                console.log(`📄 記事${index + 1}: #${post.number} "${post.name}" (${post.category || 'カテゴリなし'})`);
-                            });
-                            
                             allPosts.push(...searchData.posts.slice(0, 3));
                             postsCount += searchData.posts.length;
                             
@@ -230,47 +187,24 @@ class LLMDiaryGeneratorPhase53Unified {
                                 posts: searchData.posts.slice(0, 3).map(p => ({ number: p.number, name: p.name, category: p.category }))
                             });
                         } else {
-                            console.log(`📭 "${query}"では記事が見つかりませんでした`);
                             queryResults.push({ query: query, count: 0, posts: [] });
                         }
                     } else {
-                        console.log(`❌ 検索レスポンスが無効: "${query}"`);
                         queryResults.push({ query: query, count: 0, posts: [], error: 'invalid_response' });
                     }
                     
                     await new Promise(resolve => setTimeout(resolve, 500));
                 } catch (queryError) {
                     console.log(`⚠️ 検索クエリ "${query}" エラー: ${queryError.message}`);
-                    console.log(`🔍 エラー詳細:`, queryError);
                     queryResults.push({ query: query, count: 0, posts: [], error: queryError.message });
                 }
             }
-
-            console.log(`📊 検索結果サマリー:`);
-            console.log(`   - 実行クエリ数: ${searchQueries.length}`);
-            console.log(`   - 総取得記事数: ${postsCount}`);
-            console.log(`   - ユニーク記事数予測: ${allPosts.length}`);
-            console.log(`📋 クエリ別結果:`, queryResults);
 
             const uniquePosts = allPosts.filter((post, index, self) => 
                 index === self.findIndex(p => p.number === post.number)
             );
             
-            console.log(`🔄 重複除去処理完了:`);
-            console.log(`   - 処理前: ${allPosts.length}件`);
-            console.log(`   - 処理後: ${uniquePosts.length}件`);
-            
-            if (uniquePosts.length > 0) {
-                console.log(`📚 最終取得記事一覧:`);
-                uniquePosts.forEach((post, index) => {
-                    console.log(`   ${index + 1}. #${post.number} "${post.name}" (${post.updated_at || 'N/A'})`);
-                });
-            } else {
-                console.log(`📭 ${userName}の記事が見つかりませんでした - フォールバック処理に移行`);
-            }
-
             const profileAnalysis = this.analyzeUserProfile(uniquePosts, userName);
-            console.log(`🎯 プロフィール分析結果:`, profileAnalysis);
 
             return {
                 source: 'esa_mcp_user_specific',
@@ -284,10 +218,6 @@ class LLMDiaryGeneratorPhase53Unified {
             };
         } catch (error) {
             console.error(`❌ ${userName}の過去記事検索エラー:`, error);
-            console.log(`🔍 エラー発生箇所詳細:`, {
-                message: error.message,
-                stack: error.stack?.split('\n').slice(0, 3)
-            });
             return {
                 source: 'esa_mcp_user_specific',
                 status: 'error',
@@ -304,14 +234,8 @@ class LLMDiaryGeneratorPhase53Unified {
 
     analyzeUserProfile(posts, userName) {
         console.log(`📋 プロフィール分析実行中: ${userName}`);
-        console.log(`📊 入力データ:`, {
-            postsExists: !!posts,
-            postsLength: posts ? posts.length : 0,
-            userName: userName
-        });
         
         if (!posts || posts.length === 0) {
-            console.log(`📭 ${userName}の記事が0件 - no_postsステータスで結果返却`);
             return {
                 status: 'no_posts',
                 insights: [`${userName}の過去記事が見つかりませんでした。`]
@@ -322,9 +246,7 @@ class LLMDiaryGeneratorPhase53Unified {
         const categories = new Set();
         const titles = [];
         
-        console.log(`🔍 記事解析開始:`);
         posts.forEach((post, index) => {
-            console.log(`   ${index + 1}. #${post.number}: "${post.name}" (カテゴリ: ${post.category || 'なし'})`);
             if (post.category) categories.add(post.category);
             if (post.name) titles.push(post.name);
         });
@@ -333,15 +255,7 @@ class LLMDiaryGeneratorPhase53Unified {
         if (categories.size > 0) {
             const categoryList = Array.from(categories).slice(0, 3).join(', ');
             insights.push(`主なカテゴリ: ${categoryList}`);
-            console.log(`📁 カテゴリ分析: ${categoryList}`);
         }
-        
-        console.log(`✅ プロフィール分析完了:`, {
-            status: 'analyzed',
-            insightsCount: insights.length,
-            categoriesCount: categories.size,
-            totalPostsCount: posts.length
-        });
 
         return {
             status: 'analyzed',
@@ -354,13 +268,6 @@ class LLMDiaryGeneratorPhase53Unified {
 
     async generateAIDiary(userName, contextData, options = {}) {
         console.log(`🤖 プロフィール分析データを活用した個性的な日記生成: ${userName}`);
-        console.log(`📈 コンテキストデータ詳細:`, {
-            userName: contextData.userName,
-            userProfileAnalysis: contextData.userProfileAnalysis,
-            esaDataStatus: contextData.esaData?.status,
-            esaPostsCount: contextData.esaData?.postsCount || 0,
-            esaUniquePostsCount: contextData.esaData?.uniquePostsCount || 0
-        });
         
         const content = this.generateAdvancedDiary(userName, contextData, options);
         
@@ -371,8 +278,11 @@ class LLMDiaryGeneratorPhase53Unified {
             month: '2-digit', day: '2-digit'
         });
         
+        // 🎯 日本語表記のタイトル生成
+        const displayName = this.getJapaneseDisplayName(userName, contextData);
+        
         return {
-            title: `【代筆】${userName}: ${dateStr}の振り返り`,
+            title: `【代筆】${displayName}: ${dateStr}の振り返り`,
             content: content,
             category: 'AI代筆日記',
             qualityScore: 5
@@ -390,15 +300,13 @@ class LLMDiaryGeneratorPhase53Unified {
         // ユーザーの実際の活動に基づく日記生成
         let content = this.generatePersonalizedDiaryContent(userName, contextData, today);
         
-        // ユーザーの実際の活動に基づく日記内容に続く
-        
         // 品質情報フッターを追加（開発システム情報は除外し、品質情報は保持）
         content += this.generateCleanQualityFooter(userName, contextData);
 
         return content;
     }
 
-    // 🚨 新規実装: ユーザー個人の活動に基づく日記生成（開発チャット情報排除）
+    // ✅ 修正実装: ユーザー個人の活動に基づく日記生成（3セクション構造修正済み）
     generatePersonalizedDiaryContent(userName, contextData, today) {
         const profileAnalysis = contextData.esaData?.profileAnalysis;
         const hasProfileData = profileAnalysis && profileAnalysis.status === 'analyzed';
@@ -426,7 +334,8 @@ class LLMDiaryGeneratorPhase53Unified {
             content += `計画していたタスクを順次進めることができました。\n\n`;
         }
         
-        content += `**学んだこと**\n`;
+        // ✅ 修正: "学んだこと" → "TIL (Today I Learned)"
+        content += `**TIL (Today I Learned)**\n`;
         if (hasProfileData) {
             content += `継続的な活動の中で、新しい発見や気づきがありました。\n`;
             content += `過去の経験を活かしながら、さらなる改善点も見つけることができました。\n\n`;
@@ -435,7 +344,8 @@ class LLMDiaryGeneratorPhase53Unified {
             content += `継続的な学習の重要性を再認識しました。\n\n`;
         }
         
-        content += `**感想・反省**\n`;
+        // ✅ 修正: "感想・反省" → "こんな気分"
+        content += `**こんな気分**\n`;
         content += `今日も充実した一日を過ごすことができました。\n`;
         if (hasProfileData && profileAnalysis.totalPostsCount > 0) {
             content += `これまでの${profileAnalysis.totalPostsCount}件の記録を振り返ると、着実に成長していることを実感します。\n`;
@@ -445,7 +355,25 @@ class LLMDiaryGeneratorPhase53Unified {
         return content;
     }
 
-    // 🎆 新规実装: 開発システム情報を除外した品質情報フッター
+    // 🎯 実装: 日本語表記名の取得（タイトル用）
+    getJapaneseDisplayName(userName, contextData) {
+        const knownMappings = {
+            'okamoto-takuya': '岡本卓也',
+            'takuya.okamoto': '岡本卓也'
+        };
+        
+        const japaneseDisplayName = knownMappings[userName];
+        
+        if (japaneseDisplayName) {
+            console.log(`✅ 日本語表記名取得成功: ${userName} -> ${japaneseDisplayName}`);
+            return japaneseDisplayName;
+        }
+        
+        console.log(`⚠️ 日本語表記名が見つからないため、元の名前を使用: ${userName}`);
+        return userName;
+    }
+
+    // ✅ 実装: 開発システム情報を除外した品質情報フッター
     generateCleanQualityFooter(userName, contextData) {
         const now = new Date();
         const timestamp = now.toLocaleString('ja-JP', {
@@ -535,7 +463,7 @@ class LLMDiaryGeneratorPhase53Unified {
             if (profileAnalysis.categories.some(cat => cat.includes('報告') || cat.includes('レポート'))) {
                 features.push('報告書スタイル');
             }
-            if (profileAnalysis.categories.some(cat => cat.includes('メモ') || cat.includes('メモ'))) {
+            if (profileAnalysis.categories.some(cat => cat.includes('メモ'))) {
                 features.push('簡潔な記録');
             }
         }
@@ -545,108 +473,6 @@ class LLMDiaryGeneratorPhase53Unified {
             features.push('個人的な表現', '継続的な記録');
         }
         
-        return features;
-    }
-
-    // 🚨 削除予定: 開発システム情報を含む詳細フッター（問題の原因）
-    generateQualityFooter(userName, contextData, options = {}) {
-        const now = new Date();
-        const timestamp = now.toLocaleString('ja-JP', {
-            year: 'numeric', month: '2-digit', day: '2-digit',
-            hour: '2-digit', minute: '2-digit', second: '2-digit'
-        });
-        
-        const profileAnalysis = contextData.esaData?.profileAnalysis;
-        const hasProfileData = profileAnalysis && profileAnalysis.status === 'analyzed';
-        const esaData = contextData.esaData;
-        
-        let footer = `\n\n---\n\n**🤖 AI統合システム情報**\n`;
-        footer += `* **生成日時**: ${timestamp}\n`;
-        footer += `* **AI分析使用**: はい (${esaData?.postsCount || 0}記事分析)\n`;
-        footer += `* **AI生成使用**: はい\n`;
-        footer += `* **分析品質**: ${hasProfileData ? '5/5' : '3/5'}\n`;
-        footer += `* **生成品質**: ${hasProfileData ? '4.8/5' : '4.0/5'}\n`;
-        
-        if (hasProfileData && profileAnalysis.categories) {
-            footer += `**🎯 関心事反映分析**\n`;
-            footer += `* **検出された関心事**: ${profileAnalysis.categories.join(', ')}\n`;
-            
-            // 技術キーワードの抽出
-            const techKeywords = this.extractTechKeywords(profileAnalysis);
-            if (techKeywords.length > 0) {
-                footer += `* **技術キーワード**: ${techKeywords.slice(0, 4).join(', ')}\n`;
-            }
-            
-            footer += `* **反映された関心事**: ${profileAnalysis.categories.slice(0, 2).join(', ')}\n`;
-            footer += `* **関心事反映度**: ${this.calculateReflectionRate(profileAnalysis)}% (良好)\n`;
-            footer += `* **技術的具体性**: ${hasProfileData ? '非常に高' : '標準'} (${techKeywords.length}個の技術用語使用)\n`;
-        }
-        
-        footer += `**📊 個人化品質**\n`;
-        
-        if (hasProfileData) {
-            const styleFeatures = this.extractStyleFeatures(profileAnalysis);
-            footer += `* **文体再現度**: 4.2/5 (特徴的表現: ${styleFeatures.join(', ')})\n`;
-            footer += `* **作業パターン適合**: 4.0/5 (過去の投稿パターン反映)\n`;
-            footer += `* **総合模倣度**: 4.1/5 (高品質)\n`;
-        } else {
-            footer += `* **文体再現度**: 3.0/5 (プロフィールデータ不足)\n`;
-            footer += `* **作業パターン適合**: 2.5/5 (フォールバックモード)\n`;
-            footer += `* **総合模倣度**: 2.8/5 (標準)\n`;
-        }
-        
-        footer += `* **対象ユーザー**: ${userName}\n`;
-        footer += `* **投稿者**: esa_bot (代筆システム)\n`;
-        footer += `* **システム**: 代筆さん v5.3.0 (Phase 5.3完成版) (MCP統合版)\n`;
-        
-        // データソース情報
-        footer += `**💾 データソース情報**\n`;
-        if (esaData && esaData.status === 'available') {
-            footer += `* **esaデータ**: 取得成功 (${esaData.postsCount}件検索、${esaData.uniquePostsCount}件ユニーク)\n`;
-            
-            if (esaData.queryResults) {
-                const successfulQueries = esaData.queryResults.filter(q => q.count > 0);
-                footer += `* **有効検索クエリ**: ${successfulQueries.map(q => `"${q.query}"(${q.count}件)`).join(', ')}\n`;
-            }
-            
-            if (esaData.posts && esaData.posts.length > 0) {
-                const recentPosts = esaData.posts.slice(0, 2).map(p => `#${p.number}`).join(', ');
-                footer += `* **参照記事**: ${recentPosts}等\n`;
-            }
-        } else {
-            footer += `* **esaデータ**: 取得失敗 (フォールバックモード)\n`;
-        }
-        
-        footer += `* **Slackデータ**: ユーザーマッピング成功\n`;
-        footer += `* **MCP接続**: 正常 (esa, slack)\n`;
-        
-        footer += `\nこの投稿はMCP統合システムによって自動生成されました。OpenAI GPT-4o-miniを使用してプロフィール分析に基づく個人化された日記を生成しています。`;
-        
-        return footer;
-    }
-    
-    extractTechKeywords(profileAnalysis) {
-        const techTerms = ['Phase', 'MCP', 'API', 'AI', 'システム', 'プログラミング', 'データ', '統合', '開発', '機能'];
-        const foundTerms = [];
-        
-        if (profileAnalysis.sampleTitles) {
-            profileAnalysis.sampleTitles.forEach(title => {
-                techTerms.forEach(term => {
-                    if (title.includes(term) && !foundTerms.includes(term)) {
-                        foundTerms.push(term);
-                    }
-                });
-            });
-        }
-        
-        return foundTerms.length > 0 ? foundTerms : ['Phase 5.3', 'MCP統合', 'プロフィール分析', '自動化'];
-    }
-    
-    extractStyleFeatures(profileAnalysis) {
-        const features = ['技術的詳細記述', 'システム的思考', '進捗状況報告'];
-        if (profileAnalysis.categories.includes('日記')) {
-            features.push('日常的な表現');
-        }
         return features;
     }
     
@@ -686,8 +512,8 @@ class LLMDiaryGeneratorPhase53Unified {
                         body_md: diaryData.content,
                         category: finalCategory,
                         wip: true,
-                        user: 'esa_bot', // 🚨 修正: user属性でesa_botを指定
-                        message: `Phase 5.3完全統一版 + プロフィール分析対応による自動投稿 - ${new Date().toLocaleString('ja-JP')}`
+                        user: 'esa_bot',
+                        message: `AI代筆システムによる自動投稿 - ${new Date().toLocaleString('ja-JP')}`
                     }
                 });
                 
@@ -712,7 +538,7 @@ class LLMDiaryGeneratorPhase53Unified {
                     category: finalCategory,
                     created_by: postData.created_by || 'esa_bot',
                     metadata: {
-                        system: 'phase_5_3_unified_mcp_fixed',
+                        system: 'ai_diary_system',
                         real_posting: true,
                         user_attribute: 'esa_bot'
                     }
@@ -730,7 +556,7 @@ class LLMDiaryGeneratorPhase53Unified {
                         category: finalCategory,
                         created_by: 'esa_bot',
                         metadata: {
-                            system: 'phase_5_3_unified_mcp_fixed',
+                            system: 'ai_diary_system',
                             real_posting: false,
                             fallback_reason: 'esa_create_post_not_available',
                             user_attribute: 'esa_bot'
@@ -746,31 +572,28 @@ class LLMDiaryGeneratorPhase53Unified {
         }
     }
 
-    generatePhase53EmergencyFallback(userName, errorMessage) {
-        const content = `## Phase 5.3完全統一版 + プロフィール分析対応システム一時エラー
-
-Phase 5.3完全統一版 + プロフィール分析対応システムで一時的なエラーが発生しましたが、高品質フォールバック機能により安定して動作しています。
-
-エラー内容: ${errorMessage}
-発生時刻: ${new Date().toLocaleString('ja-JP')}
-対象ユーザー: ${userName}`;
-
-        return {
-            title: `【代筆】${userName}: Phase 5.3完全統一版システム一時エラー対応`,
-            content: content,
-            category: 'AI代筆日記',
-            qualityScore: 3
-        };
+    // 📊 実装: エラー発生段階の特定（研究データとして活用）
+    identifyProcessingStage(error) {
+        const errorMessage = error.message.toLowerCase();
+        
+        if (errorMessage.includes('初期化')) return 'initialization';
+        if (errorMessage.includes('mcp') || errorMessage.includes('接続')) return 'mcp_connection';
+        if (errorMessage.includes('esa') || errorMessage.includes('検索')) return 'esa_data_retrieval';
+        if (errorMessage.includes('プロフィール') || errorMessage.includes('分析')) return 'profile_analysis';
+        if (errorMessage.includes('日記') || errorMessage.includes('生成')) return 'diary_generation';
+        if (errorMessage.includes('投稿')) return 'posting';
+        
+        return 'unknown';
     }
 
     async cleanup() {
-        console.log('🧹 Phase 5.3完全統一版システムクリーンアップ中...');
+        console.log('🧹 AI代筆システムクリーンアップ中...');
         try {
             if (this.mcpManager) await this.mcpManager.cleanup();
             this.isInitialized = false;
-            console.log('✅ Phase 5.3完全統一版システムクリーンアップ完了');
+            console.log('✅ AI代筆システムクリーンアップ完了');
         } catch (error) {
-            console.error('❌ Phase 5.3完全統一版クリーンアップエラー:', error);
+            console.error('❌ AI代筆システムクリーンアップエラー:', error);
         }
     }
 }
