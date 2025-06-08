@@ -49,9 +49,7 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "@kajirita2002/esa-mcp-server": "^1.0.0",
     "@modelcontextprotocol/sdk": "^1.0.0",
-    "@modelcontextprotocol/server-slack": "^1.0.0",
     "@slack/bolt": "^3.17.1",
     "axios": "^1.6.0",
     "dotenv": "^16.5.0",
