@@ -140,7 +140,7 @@ class MCPConnectionManager {
             
             // 🔧 Phase 5.2最適化: 接続設定の統一
             const transport = new StdioClientTransport({
-                command: "/Users/takuya/.nvm/versions/node/v18.18.2/bin/npx",
+                command: "npx",
                 args: ["-y", "@modelcontextprotocol/server-slack"],
                 env: {
                     ...process.env,
@@ -197,7 +197,7 @@ class MCPConnectionManager {
             
             // 🔧 Phase 5.2最適化: 接続設定の統一
             const transport = new StdioClientTransport({
-                command: "/Users/takuya/.nvm/versions/node/v18.18.2/bin/npx",
+                command: "npx",
                 args: ["-y", "@kajirita2002/esa-mcp-server"],
                 env: {
                     ...process.env,
