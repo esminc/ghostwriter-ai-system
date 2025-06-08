@@ -40,6 +40,8 @@ jspm_packages/
 .env.development.local
 .env.test.local
 .env.production.local
+.env.render
+.env.render.*
 
 # Database files
 *.db
