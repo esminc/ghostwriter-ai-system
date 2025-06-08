@@ -309,16 +309,27 @@ class GhostWriterSlackBot {
                 dataSources: mcpResult?.metadata?.data_sources
             });
 
+            // 🔍 デバッグ: mcpResultのメタデータを確認
+            console.log(`🔍 mcpResultメタデータ確認:`);
+            console.log(`   - success: ${mcpResult?.success}`);
+            console.log(`   - metadata:`, mcpResult?.metadata);
+            console.log(`   - slack_data_source: "${mcpResult?.metadata?.slack_data_source}"`);
+            
             // 3. Phase 5.3完全統一版MCP完全統合プレビュー表示
             const previewData = {
                 diary: diary,
                 userId: userId,
                 mappingResult: mappingResult,
                 mcpIntegration: mcpResult?.success || false,
-                slackDataSource: mcpResult?.metadata?.data_sources?.slack || 'phase_5_3_unified',
+                slackDataSource: mcpResult?.metadata?.slack_data_source || 'phase_5_3_unified',
                 esaDataSource: mcpResult?.metadata?.data_sources?.esa || 'phase_5_3_unified',
                 phase53Complete: true
             };
+            
+            // 🔍 デバッグ: previewDataの内容を確認
+            console.log(`🔍 previewData確認:`);
+            console.log(`   - slackDataSource: "${previewData.slackDataSource}"`);
+            console.log(`   - mcpIntegration: ${previewData.mcpIntegration}`);
             
             await respond({
                 text: '✨ Phase 5.3完全統一版MCP完全統合AI代筆日記が完成しました！',
@@ -675,7 +686,7 @@ class GhostWriterSlackBot {
         if (arguments[3]) {
             const previewData = arguments[3];
             const mcpStatus = previewData.mcpIntegration ? '✅ MCP統合成功' : '⚠️ フォールバック';
-            const slackDataStatus = previewData.slackDataSource === 'real_slack_mcp' ? '✅ 実Slackデータ' : '⚠️ 模擬データ';
+            const slackDataStatus = previewData.slackDataSource === 'real_slack_mcp_multi_channel' ? '✅ 実Slackデータ' : '⚠️ 模擬データ';
             
             blocks.push({
                 type: 'section',

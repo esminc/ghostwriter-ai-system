@@ -259,6 +259,13 @@ class LLMDiaryGeneratorPhase53Unified {
                 
                 const slackData = await this.getSlackDataIntegrated(userName, options);
                 
+                // 🔍 デバッグ: 取得されたSlackデータの詳細を確認
+                console.log(`🔍 取得されたSlackデータ詳細:`);
+                console.log(`   - dataSource: "${slackData?.dataSource}"`);
+                console.log(`   - fallbackReason: "${slackData?.fallbackReason || 'N/A'}"`);
+                console.log(`   - messagesCount: ${slackData?.todayMessages?.length || 0}`);
+                console.log(`   - accessMethod: "${slackData?.accessMethod || 'N/A'}"`);
+                
                 sources.push('slack_mcp_integration');
                 contextData.slackData = slackData;
                 
@@ -463,6 +470,13 @@ class LLMDiaryGeneratorPhase53Unified {
         const hasSlackData = slackData && slackData.dataSource !== 'error' && slackData.todayMessages?.length > 0;
         const isRealSlackData = slackData?.dataSource === 'real_slack_mcp_multi_channel';
         
+        // 🔍 デバッグ: 実際のdataSource値を確認
+        console.log(`🔍 SlackデータSource分析:`);
+        console.log(`   - dataSource: "${slackData?.dataSource}"`);
+        console.log(`   - hasSlackData: ${hasSlackData}`);
+        console.log(`   - isRealSlackData: ${isRealSlackData}`);
+        console.log(`   - messageCout: ${slackData?.todayMessages?.length || 0}`);
+        
         console.log(`📝 統合日記生成: esa=${hasProfileData}, slack=${hasSlackData}(${slackData?.dataSource || 'none'})`);
         
         // 基本的な日記構造を生成（開発システム情報は含めない）
@@ -655,6 +669,12 @@ class LLMDiaryGeneratorPhase53Unified {
         const slackData = contextData.slackData;
         const hasSlackData = slackData && slackData.dataSource !== 'error';
         const isRealSlackData = slackData?.dataSource === 'real_slack_mcp_multi_channel';
+        
+        // 🔍 デバッグ: フッター用dataSource分析
+        console.log(`🔍 フッターSlackデータ分析:`);
+        console.log(`   - dataSource: "${slackData?.dataSource}"`);
+        console.log(`   - hasSlackData: ${hasSlackData}`);
+        console.log(`   - isRealSlackData: ${isRealSlackData}`);
         
         let footer = `\n\n---\n\n`;
         
