@@ -444,9 +444,8 @@ class GhostWriterSlackBot {
             // 投稿履歴をデータベースに保存
             try {
                 const HistoryModel = require('../database/models/history');
-                const history = new HistoryModel();
                 
-                await history.create({
+                await HistoryModel.create({
                     user_id: userId,
                     title: diary.title,
                     content: diary.content,
@@ -519,11 +518,10 @@ class GhostWriterSlackBot {
 
     async showHistory({ userId, respond }) {
         // データベースから履歴を取得
-        const Database = require('../database/models/history');
-        const history = new Database();
+        const HistoryModel = require('../database/models/history');
         
         try {
-            const recentHistory = await history.getRecentHistory(userId, 5);
+            const recentHistory = await HistoryModel.findByUserId(userId, 5);
             
             await respond({
                 text: '📚 代筆履歴',
