@@ -1,15 +1,21 @@
 // Slack投稿参照機能の修正 - 複数チャンネル対応版
 // 保守的アプローチ: 固定チャンネルリストによる確実な動作
 // Phase 5.2.1: MCPConnectionManager統合 + 複数チャンネル対応
+// Phase 6: 高度キーワード抽出エンジン統合
 
 // 🔧 Phase 5.2.1最適化: 統合MCPマネージャー使用
 const MCPConnectionManager = require('./mcp-connection-manager');
+// 🆕 Phase 6: 高度キーワード抽出エンジン
+const SlackKeywordExtractor = require('./slack-keyword-extractor');
 
 class SlackMCPWrapperDirect {
     constructor() {
         // 🔧 Phase 5.2.1最適化: 統合MCP接続マネージャー使用
         this.mcpManager = new MCPConnectionManager();
         this.isReady = false;
+        
+        // 🆕 Phase 6: 高度キーワード抽出エンジン初期化
+        this.keywordExtractor = new SlackKeywordExtractor();
         
         // 📊 保守的アプローチ: 固定複数チャンネル設定
         this.targetChannels = [
@@ -80,14 +86,15 @@ class SlackMCPWrapperDirect {
                 slackMCPClient
             );
             
-            // Step 3: 活動分析
+            // Step 3: 活動分析 - 🆕 Phase 6: 高度キーワード抽出エンジン使用
             const messageStats = this.calculateMessageStats(todayMessages);
-            const activityAnalysis = this.analyzeActivity(todayMessages);
+            const activityAnalysis = this.analyzeActivityAdvanced(todayMessages); // 🆕 高度化
             
-            // Step 4: 拡張分析
+            // Step 4: 拡張分析 - 🆕 Phase 6: 統合キーワード分析追加
             const sentimentAnalysis = this.analyzeSentiment(todayMessages);
             const communicationPatterns = this.analyzeCommunicationPatterns(todayMessages);
             const productivityMetrics = this.calculateProductivityMetrics(todayMessages);
+            const advancedKeywordAnalysis = this.keywordExtractor.generateIntegratedAnalysis(todayMessages); // 🆕 新機能
             
             console.log(`✅ Slack複数チャンネルデータ取得完了: ${todayMessages.length}件のメッセージ (${defaultOptions.targetChannels.length}チャンネル)`);
             
@@ -102,6 +109,7 @@ class SlackMCPWrapperDirect {
                 sentimentAnalysis: sentimentAnalysis,
                 communicationPatterns: communicationPatterns,
                 productivityMetrics: productivityMetrics,
+                advancedKeywordAnalysis: advancedKeywordAnalysis, // 🆕 Phase 6: 高度キーワード分析結果
                 userProfile: userProfile,
                 processingTime: new Date().toISOString(),
                 accessMethod: 'multi_channel_access',
@@ -239,15 +247,179 @@ class SlackMCPWrapperDirect {
     }
     
     /**
-     * ⏰ 今日のタイムスタンプ取得
+     * ⏰ 今日のタイムスタンプ取得 - 🔧 Phase 6: 最近のメッセージも含めるように最適化
      */
     getTodayTimestamp() {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        return Math.floor(today.getTime() / 1000).toString();
+        const now = new Date();
+        // 過去6時間のメッセージを取得するように変更（タイムゾーン関係なしで最新メッセージを取得）
+        const sixHoursAgo = new Date(now.getTime() - (6 * 60 * 60 * 1000));
+        console.log(`🕐 メッセージ取得範囲: ${sixHoursAgo.toISOString()} から ${now.toISOString()}`);
+        return Math.floor(sixHoursAgo.getTime() / 1000).toString();
     }
     
-    // 既存の分析メソッドを継承
+    // 🆕 Phase 6: 高度化された活動分析（既存のメソッドを置き換え）
+    analyzeActivityAdvanced(messages) {
+        console.log(`🔍 Phase 6: 高度活動分析開始 - ${messages.length}件のメッセージ`);
+        
+        // 既存のシンプル分析を実行
+        const basicAnalysis = this.analyzeActivity(messages);
+        
+        // 🆕 新しい高度キーワード分析を追加
+        const keywordAnalysis = this.keywordExtractor.extractKeywordsFromMessages(messages);
+        
+        // 高度トピック抽出
+        const advancedTopics = this.extractAdvancedTopics(keywordAnalysis);
+        
+        // チャンネルコンテキスト分析
+        const channelContext = this.keywordExtractor.analyzeChannelContext(messages);
+        
+        // 統合された関心事リストを生成
+        const detailedInterests = this.generateDetailedInterests(keywordAnalysis, channelContext);
+        
+        console.log(`✅ 高度活動分析完了:`);
+        console.log(`   - 基本トピック: ${basicAnalysis.topics.length}個`);
+        console.log(`   - 高度トピック: ${advancedTopics.length}個`);
+        console.log(`   - 詳細関心事: ${detailedInterests.length}個`);
+        
+        // 統合された結果を返す
+        return {
+            ...basicAnalysis, // 既存の結果を保持
+            advancedTopics: advancedTopics,
+            detailedInterests: detailedInterests,
+            keywordBreakdown: {
+                technical: Array.from(keywordAnalysis.technical.keys()),
+                business: Array.from(keywordAnalysis.business.keys()),
+                events: Array.from(keywordAnalysis.events.keys()),
+                emotions: Array.from(keywordAnalysis.emotions.keys())
+            },
+            channelInsights: this.generateChannelInsights(channelContext),
+            analysisMethod: 'advanced_keyword_extraction_phase6'
+        };
+    }
+    
+    // 🆕 高度トピック抽出メソッド
+    extractAdvancedTopics(keywordAnalysis) {
+        const topics = [];
+        
+        // 各カテゴリから上位トピックを抽出
+        const allCategories = [
+            { name: 'technical', data: keywordAnalysis.technical },
+            { name: 'business', data: keywordAnalysis.business },
+            { name: 'events', data: keywordAnalysis.events }
+        ];
+        
+        allCategories.forEach(category => {
+            Array.from(category.data.entries())
+                .sort((a, b) => b[1].score - a[1].score)
+                .slice(0, 3) // 各カテゴリから上位3つ
+                .forEach(([topic, data]) => {
+                    topics.push({
+                        topic: topic,
+                        category: category.name,
+                        score: data.score,
+                        matchCount: data.matchCount,
+                        confidence: this.calculateTopicConfidence(data)
+                    });
+                });
+        });
+        
+        return topics.sort((a, b) => b.score - a.score);
+    }
+    
+    // 🆕 詳細関心事生成メソッド
+    generateDetailedInterests(keywordAnalysis, channelContext) {
+        const interests = [];
+        
+        // キーワード分析からの関心事
+        const allKeywords = new Map();
+        [keywordAnalysis.technical, keywordAnalysis.business, keywordAnalysis.events].forEach(categoryMap => {
+            categoryMap.forEach((data, keyword) => {
+                allKeywords.set(keyword, {
+                    ...data,
+                    source: 'keyword_analysis'
+                });
+            });
+        });
+        
+        // チャンネルコンテキストからの関心事
+        channelContext.forEach((analysis, channelName) => {
+            analysis.dominantTopics.forEach(topicData => {
+                const existing = allKeywords.get(topicData.topic);
+                if (existing) {
+                    existing.score += topicData.score * 0.5; // チャンネルコンテキストは重み0.5
+                    existing.channels = existing.channels || [];
+                    existing.channels.push(channelName);
+                } else {
+                    allKeywords.set(topicData.topic, {
+                        score: topicData.score * 0.5,
+                        matchCount: topicData.matchCount,
+                        source: 'channel_context',
+                        channels: [channelName]
+                    });
+                }
+            });
+        });
+        
+        // スコア順にソートして詳細関心事リストを作成
+        return Array.from(allKeywords.entries())
+            .sort((a, b) => b[1].score - a[1].score)
+            .slice(0, 10) // 上位10個の関心事
+            .map(([interest, data]) => ({
+                interest: interest,
+                score: data.score,
+                confidence: this.calculateInterestConfidence(data),
+                source: data.source,
+                channels: data.channels || [],
+                evidence: `${data.matchCount}回言及`
+            }));
+    }
+    
+    // 🆕 チャンネル洞察生成メソッド
+    generateChannelInsights(channelContext) {
+        const insights = [];
+        
+        channelContext.forEach((analysis, channelName) => {
+            const context = analysis.inferredContext;
+            const topTopics = analysis.dominantTopics.slice(0, 2);
+            
+            insights.push({
+                channel: channelName,
+                primaryContext: context.primary,
+                messageCount: analysis.messageCount,
+                topTopics: topTopics.map(t => t.topic),
+                activityLevel: this.categorizeActivityLevel(analysis.messageCount)
+            });
+        });
+        
+        return insights.sort((a, b) => b.messageCount - a.messageCount);
+    }
+    
+    // 🆕 トピック信頼度計算
+    calculateTopicConfidence(data) {
+        // スコアとマッチ数に基づいて信頼度を計算
+        const baseConfidence = Math.min(data.score / 5.0, 1.0); // スコア5以上で最大信頼度
+        const matchBonus = Math.min(data.matchCount / 3.0, 0.3); // 3回以上言及で30%ボーナス
+        return Math.min(baseConfidence + matchBonus, 1.0);
+    }
+    
+    // 🆕 関心事信頼度計算
+    calculateInterestConfidence(data) {
+        let confidence = 0.5; // ベース信頼度
+        
+        if (data.score >= 2.0) confidence += 0.2;
+        if (data.matchCount >= 2) confidence += 0.2;
+        if (data.channels && data.channels.length > 1) confidence += 0.1; // 複数チャンネルで言及
+        
+        return Math.min(confidence, 1.0);
+    }
+    
+    // 🆕 活動レベル分類
+    categorizeActivityLevel(messageCount) {
+        if (messageCount >= 5) return 'very_active';
+        if (messageCount >= 3) return 'active';
+        if (messageCount >= 1) return 'moderate';
+        return 'low';
+    }
     calculateMessageStats(messages) {
         const channelsActive = [...new Set(messages.map(msg => msg.channel_name))];
         const totalReactions = messages.reduce((total, msg) => {

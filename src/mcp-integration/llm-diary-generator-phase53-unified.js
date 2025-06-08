@@ -718,12 +718,24 @@ class LLMDiaryGeneratorPhase53Unified {
         }
         
         if (hasProfileData && profileAnalysis.categories) {
-            // 関心事分析（開発関連カテゴリをフィルタリング）
+            // 🆕 Phase 6: 詳細関心事抽出（esaカテゴリ + Slackキーワード統合）
             const userCategories = profileAnalysis.categories.filter(cat => 
                 !cat.includes('AI代筆日記') && !cat.includes('Phase') && !cat.includes('MCP')
             );
             
-            if (userCategories.length > 0) {
+            // Phase 6の高度関心事抽出を使用
+            const detailedInterests = this.extractDetailedInterestsForFooter(userCategories, slackData);
+            
+            if (detailedInterests.length > 0) {
+                footer += `**🎯 関心事反映分析**:\n`;
+                footer += `* **検出された関心事**: ${detailedInterests.join(', ')}\n`;
+                footer += `* **反映された関心事**: ${detailedInterests.slice(0, Math.ceil(detailedInterests.length * 0.8)).join(', ')}\n`;
+                
+                // Phase 6: 高度反映率計算を使用
+                const advancedReflectionRate = this.calculateAdvancedReflectionRate(profileAnalysis, slackData);
+                footer += `* **関心事反映度**: ${advancedReflectionRate}% (${advancedReflectionRate >= 90 ? '優秀' : advancedReflectionRate >= 80 ? '良好' : '標準'})\n\n`;
+            } else if (userCategories.length > 0) {
+                // フォールバック: 従来の方式
                 footer += `**🎯 関心事反映分析**:\n`;
                 footer += `* **検出された関心事**: ${userCategories.join(', ')}\n`;
                 footer += `* **反映された関心事**: ${userCategories.slice(0, 2).join(', ')}\n`;
@@ -829,6 +841,220 @@ class LLMDiaryGeneratorPhase53Unified {
         // カテゴリ数と投稿数に基づいて反映率を計算
         const baseRate = Math.min(80, 40 + (categoryCount * 10) + Math.min(postsCount * 5, 30));
         return Math.round(baseRate);
+    }
+    
+    // 🆕 Phase 6: フッター用詳細関心事抽出
+    extractDetailedInterestsForFooter(userCategories, slackData) {
+        const detailedInterests = new Set();
+        
+        // esaカテゴリからの関心事抽出（日付情報を除外）
+        userCategories.forEach(category => {
+            if (!category.includes('日記/')) { // 日付情報を除外
+                detailedInterests.add(category);
+            }
+        });
+        
+        // 🆕 Phase 6: Slackトピックを具体的な関心事に変換
+        if (slackData && slackData.dataSource === 'real_slack_mcp_multi_channel') {
+            // Slackで検出されたメイントピックを関心事として追加
+            if (slackData.activityAnalysis && slackData.activityAnalysis.topics) {
+                slackData.activityAnalysis.topics.forEach(topic => {
+                    const translatedTopic = this.translateTopicToInterest(topic);
+                    if (translatedTopic) {
+                        detailedInterests.add(translatedTopic);
+                    }
+                });
+            }
+            
+            // キー活動を関心事として追加
+            if (slackData.activityAnalysis && slackData.activityAnalysis.keyActivities) {
+                slackData.activityAnalysis.keyActivities.slice(0, 3).forEach(activity => {
+                    const translatedActivity = this.translateActivityToInterest(activity);
+                    if (translatedActivity) {
+                        detailedInterests.add(translatedActivity);
+                    }
+                });
+            }
+            
+            // キーワードブレイクダウンから技術キーワードを追加
+            if (slackData.activityAnalysis && slackData.activityAnalysis.keywordBreakdown) {
+                const breakdown = slackData.activityAnalysis.keywordBreakdown;
+                
+                // 技術キーワードを優先的に追加
+                if (breakdown.technical && breakdown.technical.length > 0) {
+                    breakdown.technical.slice(0, 4).forEach(keyword => {
+                        const translatedKeyword = this.translateKeywordToInterest(keyword);
+                        if (translatedKeyword) {
+                            detailedInterests.add(translatedKeyword);
+                        }
+                    });
+                }
+                
+                // イベントキーワードを追加
+                if (breakdown.events && breakdown.events.length > 0) {
+                    breakdown.events.slice(0, 2).forEach(keyword => {
+                        const translatedKeyword = this.translateKeywordToInterest(keyword);
+                        if (translatedKeyword) {
+                            detailedInterests.add(translatedKeyword);
+                        }
+                    });
+                }
+                
+                // ビジネスキーワードを追加
+                if (breakdown.business && breakdown.business.length > 0) {
+                    breakdown.business.slice(0, 2).forEach(keyword => {
+                        const translatedKeyword = this.translateKeywordToInterest(keyword);
+                        if (translatedKeyword) {
+                            detailedInterests.add(translatedKeyword);
+                        }
+                    });
+                }
+            }
+        } else if (slackData && slackData.activityAnalysis) {
+            // フォールバックデータからの関心事抽出
+            if (slackData.activityAnalysis.topics) {
+                slackData.activityAnalysis.topics.forEach(topic => {
+                    const translatedTopic = this.translateTopicToInterest(topic);
+                    if (translatedTopic) {
+                        detailedInterests.add(translatedTopic);
+                    }
+                });
+            }
+            if (slackData.activityAnalysis.keyActivities) {
+                slackData.activityAnalysis.keyActivities.slice(0, 2).forEach(activity => {
+                    const translatedActivity = this.translateActivityToInterest(activity);
+                    if (translatedActivity) {
+                        detailedInterests.add(translatedActivity);
+                    }
+                });
+            }
+        }
+        
+        const finalInterests = Array.from(detailedInterests).slice(0, 10); // 最大10個まで
+        console.log(`🔍 フッター用詳細関心事抽出: ${finalInterests.length}個の関心事を特定`);
+        console.log(`   → 関心事: ${finalInterests.join(', ')}`);
+        return finalInterests;
+    }
+    translateTopicToInterest(topic) {
+        const topicTranslations = {
+            'ミーティング': 'ミーティング・会議',
+            'ハッカソン': 'ハッカソン・イベント', 
+            'AI開発': 'AI・機械学習',
+            'esa活動': 'ドキュメント作成',
+            'ChatGPT': 'AI・機械学習',
+            'テスト': 'システム開発',
+            '複数チャンネル対応': 'システム統合',
+            'システム最適化': 'システム開発',
+            'ハッカソン準備': 'ハッカソン・イベント',
+            '技術学習': '技術学習',
+            'AI': 'AI・機械学習',
+            '機械学習': 'AI・機械学習',
+            'プログラミング': 'プログラミング',
+            'システム': 'システム開発',
+            '開発': 'システム開発',
+            'チーム連携': 'チーム協力',
+            'MCP統合': 'システム統合'
+        };
+        
+        // 完全一致を最初に試す
+        if (topicTranslations[topic]) {
+            return topicTranslations[topic];
+        }
+        
+        // 部分一致を試す
+        for (const [key, value] of Object.entries(topicTranslations)) {
+            if (topic.includes(key) || key.includes(topic)) {
+                return value;
+            }
+        }
+        
+        // 技術的なキーワードを含む場合の処理
+        if (topic.includes('AI') || topic.includes('人工知能')) return 'AI・機械学習';
+        if (topic.includes('ハッカソン') || topic.includes('hackathon')) return 'ハッカソン・イベント';
+        if (topic.includes('会議') || topic.includes('meeting')) return 'ミーティング・会議';
+        if (topic.includes('開発') || topic.includes('システム')) return 'システム開発';
+        if (topic.includes('学習') || topic.includes('勉強')) return '技術学習';
+        if (topic.includes('チーム') || topic.includes('協力')) return 'チーム協力';
+        
+        return null; // 変換できない場合はnullを返す
+    }
+    
+    // 🆕 キーワードを関心事に変換するヘルパーメソッド
+    translateKeywordToInterest(keyword) {
+        const translations = {
+            'ai': 'AI・機械学習',
+            'chatgpt': 'AI・機械学習', 
+            'gpt': 'AI・機械学習',
+            'llm': 'AI・機械学習',
+            'javascript': 'プログラミング',
+            'react': 'プログラミング',
+            'python': 'プログラミング',
+            'docker': 'システム開発',
+            'aws': 'システム開発',
+            'kubernetes': 'システム開発',
+            'nextjs': 'プログラミング',
+            'express': 'プログラミング',
+            'postgresql': 'データベース',
+            'mongodb': 'データベース',
+            'hackathon': 'ハッカソン・イベント',
+            'ハッカソン': 'ハッカソン・イベント',
+            '会議': 'ミーティング・会議',
+            'meeting': 'ミーティング・会議',
+            'ミーティング': 'ミーティング・会議',
+            'プロジェクト': 'プロジェクト管理',
+            '開発': 'システム開発',
+            '学習': '技術学習',
+            '勉強': '技術学習',
+            'チーム': 'チーム協力'
+        };
+        
+        const lowerKeyword = keyword.toLowerCase();
+        return translations[lowerKeyword] || translations[keyword] || null;
+    }
+    
+    // 🆕 活動を関心事に変換するヘルパーメソッド
+    translateActivityToInterest(activity) {
+        if (activity.includes('AI') || activity.includes('人工知能')) return 'AI・機械学習';
+        if (activity.includes('会議') || activity.includes('案内')) return 'ミーティング・会議';
+        if (activity.includes('ハッカソン') || activity.includes('参加')) return 'ハッカソン・イベント';
+        if (activity.includes('開発') || activity.includes('システム')) return 'システム開発';
+        if (activity.includes('MCP') || activity.includes('統合')) return 'システム統合';
+        if (activity.includes('Slack') || activity.includes('コミュニケーション')) return 'チーム協力';
+        if (activity.includes('学習') || activity.includes('勉強')) return '技術学習';
+        return null;
+    }
+    
+    // 🆕 Phase 6: 高度反映率計算（Slackデータを含む）
+    calculateAdvancedReflectionRate(profileAnalysis, slackData) {
+        let baseRate = this.calculateReflectionRate(profileAnalysis);
+        
+        // Slackデータによるボーナス
+        if (slackData && slackData.dataSource === 'real_slack_mcp_multi_channel') {
+            baseRate += 10; // 実データボーナス
+            
+            // 高度トピック数によるボーナス
+            if (slackData.activityAnalysis && slackData.activityAnalysis.advancedTopics) {
+                const advancedTopicsCount = slackData.activityAnalysis.advancedTopics.length;
+                baseRate += Math.min(advancedTopicsCount * 2, 12); // 高度トピックボーナス
+            }
+            
+            // 詳細関心事数によるボーナス
+            if (slackData.activityAnalysis && slackData.activityAnalysis.detailedInterests) {
+                const detailedInterestsCount = slackData.activityAnalysis.detailedInterests.length;
+                baseRate += Math.min(detailedInterestsCount * 1.5, 8); // 詳細関心事ボーナス
+            }
+            
+            // メッセージ数とチャンネル数によるボーナス
+            const messageCount = slackData.todayMessages?.length || 0;
+            const channelCount = slackData.messageStats?.channelsActive?.length || 0;
+            if (messageCount > 5) baseRate += 3;
+            if (channelCount > 2) baseRate += 2;
+        } else if (slackData && slackData.activityAnalysis) {
+            // フォールバックデータの小さなボーナス
+            baseRate += 5;
+        }
+        
+        return Math.min(Math.round(baseRate), 95); // 最大95%
     }
     
     async postToEsaWithMCP(diaryData, metadata = {}) {
