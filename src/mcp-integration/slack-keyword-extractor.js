@@ -1,8 +1,12 @@
 // Slackメッセージ高度キーワード抽出エンジン
-// Phase 6: 関心事反映分析の大幅強化
+// Phase 6.5: 動的特徴語抽出機能追加
 
 class SlackKeywordExtractor {
     constructor() {
+        this.initializeKeywordDictionaries();
+    }
+    
+    initializeKeywordDictionaries() {
         // 🎯 技術関連キーワード辞書
         this.techKeywords = {
             programming: {
@@ -94,6 +98,179 @@ class SlackKeywordExtractor {
             }
         };
     }
+
+    // 🆕 Phase 6.5: 動的特徴語抽出機能
+    /**
+     * メッセージから動的に特徴的な単語を発見する
+     */
+    extractRecentCharacteristicWords(messages) {
+        console.log(`🔍 動的特徴語抽出開始: ${messages.length}件のメッセージ`);
+        
+        const characteristicWords = new Set();
+        const wordFrequency = new Map();
+        
+        messages.forEach(msg => {
+            const text = msg.text || '';
+            const words = this.simpleTokenize(text);
+            
+            words.forEach(word => {
+                // 特徴語判定
+                if (this.looksCharacteristic(word)) {
+                    characteristicWords.add(word);
+                    
+                    // 頻度カウント
+                    const currentCount = wordFrequency.get(word) || 0;
+                    wordFrequency.set(word, currentCount + 1);
+                }
+            });
+        });
+        
+        // 頻度順にソートして上位を返す
+        const sortedWords = Array.from(characteristicWords)
+            .map(word => ({
+                word: word,
+                frequency: wordFrequency.get(word) || 0,
+                category: this.categorizeCharacteristicWord(word)
+            }))
+            .sort((a, b) => b.frequency - a.frequency)
+            .slice(0, 15); // 上位15個まで
+        
+        console.log(`✅ 動的特徴語抽出完了: ${sortedWords.length}個の特徴語を発見`);
+        console.log(`   → 特徴語例: ${sortedWords.slice(0, 5).map(w => w.word).join(', ')}`);
+        
+        return sortedWords;
+    }
+    
+    /**
+     * 🔍 シンプルなトークン化（日本語・英語混在対応）
+     */
+    simpleTokenize(text) {
+        // 基本的な単語分割（空白、句読点で分割）
+        const tokens = text
+            .toLowerCase()
+            .split(/[\s\n\r\t,.。、！!？?（）()【】\[\]「」『』""'']+/)
+            .filter(token => token.length > 0)
+            .map(token => token.trim());
+        
+        // 英数字混在の単語を抽出
+        const words = [];
+        tokens.forEach(token => {
+            // URL除外
+            if (token.includes('http') || token.includes('www.')) return;
+            
+            // 長さ制限
+            if (token.length >= 2 && token.length <= 50) {
+                words.push(token);
+            }
+        });
+        
+        return words;
+    }
+    
+    /**
+     * 🎯 特徴語判定ロジック（驚き効果最大化）
+     */
+    looksCharacteristic(word) {
+        const characteristics = [
+            // 技術系キーワードの特徴
+            /[A-Z]/.test(word),                    // 大文字含む: "API", "ngrok"
+            /[a-z][A-Z]/.test(word),              // キャメルケース: "JavaScript", "OpenAI"
+            word.includes('.'),                    // ドット含む: "next.js", "node.js"
+            word.includes('-'),                    // ハイフン含む: "real-time", "up-to-date"
+            /^[A-Z]{2,}$/.test(word),             // 全大文字: "API", "MCP", "LLM"
+            word.length >= 6 && /^[a-zA-Z]+$/.test(word), // 長い英単語: "integration", "authentication"
+            
+            // 日本語技術用語の特徴
+            word.includes('システム') && word.length > 4,
+            word.includes('機能') && word.length > 3,
+            word.includes('実装') && word.length > 3,
+            word.includes('開発') && word.length > 3,
+            
+            // 数値含有の特徴的表現
+            /[0-9]/.test(word) && word.length >= 3, // "phase6", "v1.0", "port3000"
+            
+            // 特殊記号含有
+            word.includes('_') || word.includes('@') || word.includes('#')
+        ];
+        
+        return characteristics.some(check => check);
+    }
+    
+    /**
+     * 🏷️ 特徴語のカテゴリ分類
+     */
+    categorizeCharacteristicWord(word) {
+        const lowerWord = word.toLowerCase();
+        
+        // 技術カテゴリ判定
+        if (['api', 'mcp', 'llm', 'ai', 'gpt', 'claude'].includes(lowerWord)) return 'AI技術';
+        if (['ngrok', 'docker', 'aws', 'github', 'postgresql'].includes(lowerWord)) return 'インフラ';
+        if (['javascript', 'react', 'nextjs', 'express', 'node'].includes(lowerWord)) return 'プログラミング';
+        if (['slack', 'esa', 'teams', 'zoom'].includes(lowerWord)) return 'ツール';
+        if (lowerWord.includes('hack') || lowerWord.includes('イベント')) return 'イベント';
+        
+        // パターンベース判定
+        if (/^[A-Z]{2,}$/.test(word)) return 'テクニカル略語';
+        if (word.includes('.js') || word.includes('.py')) return 'ファイル・技術';
+        if (word.includes('-') && word.length > 5) return '複合技術用語';
+        
+        return '一般特徴語';
+    }
+    
+    // 🆕 Phase 6.5: AI自由生成サポート用メソッド
+    /**
+     * AI生成プロンプト用の特徴語リストを生成
+     */
+    generatePromptCharacteristicWords(messages, maxWords = 8) {
+        const characteristicWords = this.extractRecentCharacteristicWords(messages);
+        
+        // AI生成に適した特徴語を選別
+        const promptWords = characteristicWords
+            .filter(wordData => {
+                // 汎用すぎる単語を除外
+                const excludeGeneric = ['システム', 'プロジェクト', '開発', '作業'];
+                return !excludeGeneric.includes(wordData.word);
+            })
+            .slice(0, maxWords)
+            .map(wordData => wordData.word);
+        
+        console.log(`🎨 AI生成用特徴語選別完了: ${promptWords.join(', ')}`);
+        return promptWords;
+    }
+    
+    /**
+     * 特徴語を活用した活動内容の推測
+     */
+    inferActivitiesFromCharacteristicWords(messages) {
+        const characteristicWords = this.extractRecentCharacteristicWords(messages);
+        const activities = [];
+        
+        // 特徴語パターンから活動を推測
+        const wordList = characteristicWords.map(w => w.word);
+        
+        if (wordList.some(w => ['ngrok', 'mcp', 'claude', 'api'].includes(w.toLowerCase()))) {
+            activities.push('AI統合システムの開発');
+        }
+        if (wordList.some(w => ['slack', 'チーム', 'ミーティング'].includes(w.toLowerCase()))) {
+            activities.push('チームコミュニケーション');
+        }
+        if (wordList.some(w => ['ハッカソン', 'イベント', 'コンテスト'].includes(w.toLowerCase()))) {
+            activities.push('イベント参加・準備');
+        }
+        if (wordList.some(w => ['実装', 'コード', 'プログラム'].includes(w.toLowerCase()))) {
+            activities.push('プログラミング作業');
+        }
+        if (wordList.some(w => ['学習', '調査', '研究'].includes(w.toLowerCase()))) {
+            activities.push('技術学習・研究');
+        }
+        
+        // デフォルト活動
+        if (activities.length === 0) {
+            activities.push('日常的なシステム開発作業');
+        }
+        
+        return activities.slice(0, 3); // 最大3つまで
+    }
     
     /**
      * 🎯 メッセージ群からの高度キーワード抽出
@@ -106,6 +283,8 @@ class SlackKeywordExtractor {
             business: new Map(),
             events: new Map(),
             emotions: new Map(),
+            // 🆕 Phase 6.5: 動的特徴語を追加
+            characteristic: this.extractRecentCharacteristicWords(messages),
             rawData: {
                 totalMessages: messages.length,
                 totalCharacters: 0,
@@ -140,6 +319,7 @@ class SlackKeywordExtractor {
         console.log(`   - ビジネス: ${extractedKeywords.business.size}種類`);
         console.log(`   - イベント: ${extractedKeywords.events.size}種類`);
         console.log(`   - 感情: ${extractedKeywords.emotions.size}種類`);
+        console.log(`   - 動的特徴語: ${extractedKeywords.characteristic.length}語`);
         
         return extractedKeywords;
     }
@@ -284,7 +464,9 @@ class SlackKeywordExtractor {
                 totalKeywords: keywords.technical.size + keywords.business.size + keywords.events.size,
                 dominantCategory: this.getDominantCategory(keywords),
                 activityLevel: this.calculateActivityLevel(messages),
-                focusAreas: topInterests.slice(0, 3).map(item => item.interest)
+                focusAreas: topInterests.slice(0, 3).map(item => item.interest),
+                // 🆕 Phase 6.5: 動的特徴語情報を追加
+                characteristicWords: keywords.characteristic.slice(0, 5).map(w => w.word)
             }
         };
     }

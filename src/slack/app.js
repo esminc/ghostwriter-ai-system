@@ -13,6 +13,9 @@ const { initDatabase } = require('../database/init');
 
 class GhostWriterSlackBot {
     constructor() {
+        // 一時的な日記保存用
+        this.tempDiaries = new Map();
+        
         // 環境変数のチェックとデバッグ情報
         console.log('🔍 環境変数チェック:');
         console.log('   SLACK_BOT_TOKEN:', process.env.SLACK_BOT_TOKEN ? process.env.SLACK_BOT_TOKEN.substring(0, 10) + '...' : 'NOT SET');
@@ -315,9 +318,14 @@ class GhostWriterSlackBot {
             console.log(`   - metadata:`, mcpResult?.metadata);
             console.log(`   - slack_data_source: "${mcpResult?.metadata?.slack_data_source}"`);
             
+            // 日記を一時保存し、軽量化したIDで管理
+            const diaryId = `${userId}_${Date.now()}`;
+            this.tempDiaries.set(diaryId, diary);
+            
             // 3. Phase 5.3完全統一版MCP完全統合プレビュー表示
             const previewData = {
                 diary: diary,
+                diaryId: diaryId,  // 追加
                 userId: userId,
                 mappingResult: mappingResult,
                 mcpIntegration: mcpResult?.success || false,
@@ -405,13 +413,25 @@ class GhostWriterSlackBot {
                 throw new Error('日記データの解析に失敗しました');
             }
             
-            // diary オブジェクトの存在確認
-            if (!diaryData || !diaryData.diary) {
-                console.error('❌ Invalid diary data structure:', diaryData);
-                throw new Error('日記データの構造が無効です');
-            }
+            let diary;
             
-            const diary = diaryData.diary;
+            // 新しいdiaryId形式かどうかチェック
+            if (diaryData.diaryId) {
+                // 一時保存から取得
+                diary = this.tempDiaries.get(diaryData.diaryId);
+                if (!diary) {
+                    throw new Error('日記データが見つかりません。再生成してください。');
+                }
+                // 使用後は削除
+                this.tempDiaries.delete(diaryData.diaryId);
+            } else {
+                // 古い形式（フォールバック）
+                if (!diaryData || !diaryData.diary) {
+                    console.error('❌ Invalid diary data structure:', diaryData);
+                    throw new Error('日記データの構造が無効です');
+                }
+                diary = diaryData.diary;
+            }
             
             // 必須フィールドの確認
             if (!diary.title || !diary.content) {
@@ -666,7 +686,7 @@ class GhostWriterSlackBot {
                 type: 'section',
                 text: {
                     type: 'mrkdwn',
-                    text: `*📄 内容プレビュー:*\n\`\`\`\n${diary.content.substring(0, 500)}${diary.content.length > 500 ? '...' : ''}\n\`\`\``
+                    text: `*📄 内容プレビュー:*\n\`\`\`\n${diary.content.substring(0, 400)}${diary.content.length > 400 ? '...' : ''}\n\`\`\``
                 }
             }
         ];
@@ -712,7 +732,7 @@ class GhostWriterSlackBot {
                         },
                         style: 'primary',
                         action_id: 'ghostwrite_post_to_esa',
-                        value: JSON.stringify({ diary: diary })
+                        value: JSON.stringify({ diaryId: arguments[3]?.diaryId })
                     },
                     {
                         type: 'button',
