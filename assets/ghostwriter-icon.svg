@@ -1,0 +1,157 @@
+<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- 背景グラデーション -->
+  <defs>
+    <radialGradient id="bgGradient" cx="50%" cy="30%">
+      <stop offset="0%" style="stop-color:#667eea;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#764ba2;stop-opacity:1" />
+    </radialGradient>
+    
+    <!-- ゴーストのグラデーション -->
+    <linearGradient id="ghostGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffffff;stop-opacity:0.95" />
+      <stop offset="50%" style="stop-color:#f8fafc;stop-opacity:0.9" />
+      <stop offset="100%" style="stop-color:#e2e8f0;stop-opacity:0.85" />
+    </linearGradient>
+    
+    <!-- ペンのグラデーション -->
+    <linearGradient id="penGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1d4ed8;stop-opacity:1" />
+    </linearGradient>
+    
+    <!-- AI輝きエフェクト -->
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="8" result="coloredBlur"/>
+      <feMerge> 
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    
+    <!-- ドロップシャドウ -->
+    <filter id="dropshadow">
+      <feDropShadow dx="2" dy="4" stdDeviation="6" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  
+  <!-- 背景 -->
+  <rect width="512" height="512" fill="url(#bgGradient)"/>
+  
+  <!-- 外側の装飾リング -->
+  <circle cx="256" cy="256" r="240" fill="none" stroke="#ffffff" stroke-width="3" opacity="0.2"/>
+  
+  <!-- ゴースト本体 -->
+  <path d="M 256 80 
+           C 200 80, 160 120, 160 176
+           L 160 340
+           C 160 365, 180 380, 190 370
+           L 210 350
+           C 225 335, 245 350, 265 370
+           L 285 390
+           C 300 405, 315 390, 330 370
+           L 350 350
+           C 365 335, 385 350, 400 370
+           L 420 390
+           C 435 405, 450 390, 450 340
+           L 450 176
+           C 450 120, 400 80, 256 80 Z" 
+        fill="url(#ghostGradient)" 
+        stroke="#e2e8f0" 
+        stroke-width="4"
+        filter="url(#dropshadow)"/>
+  
+  <!-- ゴーストの目 -->
+  <circle cx="216" cy="180" r="20" fill="#1f2937"/>
+  <circle cx="296" cy="180" r="20" fill="#1f2937"/>
+  
+  <!-- AI輝き（目） -->
+  <circle cx="222" cy="174" r="6" fill="#3b82f6" filter="url(#glow)"/>
+  <circle cx="302" cy="174" r="6" fill="#3b82f6" filter="url(#glow)"/>
+  
+  <!-- ゴーストの口（微笑み） -->
+  <path d="M 230 220 Q 256 240, 282 220" 
+        stroke="#1f2937" 
+        stroke-width="4" 
+        fill="none" 
+        stroke-linecap="round"/>
+  
+  <!-- ペン（大きくしてより目立つように） -->
+  <g transform="rotate(25 350 300)">
+    <!-- ペン本体 -->
+    <rect x="330" y="250" width="16" height="90" fill="url(#penGradient)" rx="8" filter="url(#dropshadow)"/>
+    <!-- ペン先 -->
+    <polygon points="330,340 346,340 338,355" fill="#1f2937"/>
+    <!-- ペンのクリップ -->
+    <rect x="340" y="260" width="3" height="20" fill="#60a5fa"/>
+    <!-- ペンの装飾 -->
+    <rect x="332" y="270" width="12" height="3" fill="#93c5fd" rx="1"/>
+    <rect x="332" y="280" width="12" height="3" fill="#93c5fd" rx="1"/>
+  </g>
+  
+  <!-- 書かれている文字（魔法的な軌跡を大きく） -->
+  <g opacity="0.8">
+    <path d="M 120 320 Q 180 310, 240 320 T 360 315" 
+          stroke="#3b82f6" 
+          stroke-width="5" 
+          fill="none" 
+          stroke-linecap="round"/>
+    <path d="M 130 350 Q 190 340, 250 350 T 350 345" 
+          stroke="#3b82f6" 
+          stroke-width="5" 
+          fill="none" 
+          stroke-linecap="round"/>
+    <path d="M 140 380 Q 200 370, 260 380 T 340 375" 
+          stroke="#3b82f6" 
+          stroke-width="4" 
+          fill="none" 
+          stroke-linecap="round"/>
+  </g>
+  
+  <!-- 魔法のキラキラエフェクト（大きく配置） -->
+  <g opacity="0.9">
+    <!-- 星1 -->
+    <g transform="translate(100, 150)">
+      <path d="M 0,-12 L 4,-4 L 12,0 L 4,4 L 0,12 L -4,4 L -12,0 L -4,-4 Z" 
+            fill="#fbbf24" filter="url(#glow)"/>
+    </g>
+    
+    <!-- 星2 -->
+    <g transform="translate(400, 180)">
+      <path d="M 0,-8 L 2.5,-2.5 L 8,0 L 2.5,2.5 L 0,8 L -2.5,2.5 L -8,0 L -2.5,-2.5 Z" 
+            fill="#a78bfa" filter="url(#glow)"/>
+    </g>
+    
+    <!-- 星3 -->
+    <g transform="translate(420, 280)">
+      <path d="M 0,-10 L 3,-3 L 10,0 L 3,3 L 0,10 L -3,3 L -10,0 L -3,-3 Z" 
+            fill="#34d399" filter="url(#glow)"/>
+    </g>
+    
+    <!-- 星4 -->
+    <g transform="translate(80, 280)">
+      <path d="M 0,-6 L 2,-2 L 6,0 L 2,2 L 0,6 L -2,2 L -6,0 L -2,-2 Z" 
+            fill="#f472b6" filter="url(#glow)"/>
+    </g>
+    
+    <!-- 星5 -->
+    <g transform="translate(380, 120)">
+      <path d="M 0,-9 L 2.7,-2.7 L 9,0 L 2.7,2.7 L 0,9 L -2.7,2.7 L -9,0 L -2.7,-2.7 Z" 
+            fill="#fb7185" filter="url(#glow)"/>
+    </g>
+  </g>
+  
+  <!-- AIラベル（上部） -->
+  <text x="256" y="50" text-anchor="middle" font-family="Arial, sans-serif" font-size="32" font-weight="bold" fill="#ffffff" opacity="0.95" filter="url(#glow)">AI</text>
+  
+  <!-- ブランド名（下部） -->
+  <text x="256" y="480" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" font-weight="600" fill="#ffffff" opacity="0.8">GhostWriter</text>
+  
+  <!-- 追加の装飾エフェクト -->
+  <g opacity="0.3">
+    <circle cx="256" cy="256" r="220" fill="none" stroke="#ffffff" stroke-width="1"/>
+    <circle cx="256" cy="256" r="200" fill="none" stroke="#ffffff" stroke-width="1"/>
+  </g>
+  
+  <!-- 微細なテクスチャ -->
+  <rect width="512" height="512" fill="url(#bgGradient)" opacity="0.1"/>
+</svg>

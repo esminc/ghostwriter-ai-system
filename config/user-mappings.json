@@ -1,0 +1,23 @@
+{
+  "userMappings": {
+    "slack_to_esa": {
+      "takuya.okamoto": "okamoto-takuya",
+      "takuya_okamoto": "okamoto-takuya",
+      "takuya-okamoto": "okamoto-takuya",
+      "y-sakai": "y-sakai"
+    },
+    "esa_to_slack": {
+      "okamoto-takuya": "takuya.okamoto",
+      "y-sakai": "y-sakai"
+    }
+  },
+  "defaultMappings": {
+    "fallback_enabled": false,
+    "auto_normalize": false
+  },
+  "mappingRules": {
+    "description": "Slack User ID to esa screen_name mapping",
+    "last_updated": "2025-05-28",
+    "maintainer": "takuya.okamoto"
+  }
+}
