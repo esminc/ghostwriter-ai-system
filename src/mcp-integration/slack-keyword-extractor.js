@@ -1,5 +1,6 @@
 // Slackメッセージ高度キーワード抽出エンジン
 // Phase 6.5: 動的特徴語抽出機能追加
+// Phase 6.6: 日常体験キーワード対応
 
 class SlackKeywordExtractor {
     constructor() {
@@ -168,7 +169,7 @@ class SlackKeywordExtractor {
     }
     
     /**
-     * 🎯 特徴語判定ロジック（驚き効果最大化）
+     * 🎯 特徴語判定ロジック（驚き効果最大化 + Phase 6.6: 日常体験対応）
      */
     looksCharacteristic(word) {
         const characteristics = [
@@ -186,6 +187,12 @@ class SlackKeywordExtractor {
             word.includes('実装') && word.length > 3,
             word.includes('開発') && word.length > 3,
             
+            // 🆕 Phase 6.6: 日常体験キーワードを追加
+            this.isLocationKeyword(word),          // 地名・場所: "三鷷", "北陸新幹線"
+            this.isActivityKeyword(word),          // 活動: "合宿", "アフタヌーンティー"
+            this.isFoodKeyword(word),              // 食べ物: "たい焼き", "ラーメン"
+            this.isBusinessTermKeyword(word),      // ビジネス: "チーム運営", "PJ進め方"
+            
             // 数値含有の特徴的表現
             /[0-9]/.test(word) && word.length >= 3, // "phase6", "v1.0", "port3000"
             
@@ -196,11 +203,95 @@ class SlackKeywordExtractor {
         return characteristics.some(check => check);
     }
     
+    // 🆕 Phase 6.6: 日常体験キーワード判定メソッド
     /**
-     * 🏷️ 特徴語のカテゴリ分類
+     * 地名・場所キーワード判定
+     */
+    isLocationKeyword(word) {
+        const locationPatterns = [
+            // 主要都市
+            '東京', '大阪', '名古屋', '福岡', '札幌', '京都', '神戸', '横浜',
+            // 特定地域
+            '三鷷', '渋谷', '新宿', '池袋', '品川', '秋葉原', '武蔵野',
+            // 交通関連
+            '新幹線', '北陸新幹線', '東海道新幹線', 'jr', '私鉄',
+            // 建物・施設
+            'ホテル', 'カフェ', 'レストラン', 'オフィス', '会議室'
+        ];
+        
+        return locationPatterns.some(pattern => 
+            word.includes(pattern) || pattern.includes(word)
+        );
+    }
+    
+    /**
+     * 活動キーワード判定
+     */
+    isActivityKeyword(word) {
+        const activityPatterns = [
+            // イベント・活動
+            '合宿', 'アフタヌーンティー', 'ランチ', 'ディナー', '飲み会',
+            // レジャー活動
+            '映画', 'ショッピング', '旅行', '散歩', 'サイクリング',
+            // ビジネス活動
+            'ミーティング', 'プレゼン', '研修', 'セミナー', 'ワークショップ'
+        ];
+        
+        return activityPatterns.some(pattern => 
+            word.includes(pattern) || pattern.includes(word)
+        );
+    }
+    
+    /**
+     * 食べ物キーワード判定
+     */
+    isFoodKeyword(word) {
+        const foodPatterns = [
+            // 和食
+            'たい焼き', 'おいしい', 'おいも', 'おやき', '寿司', 'てんぷら',
+            // 洋食
+            'パスタ', 'ピザ', 'ケーキ', 'コーヒー', 'サンドイッチ',
+            // アジア料理
+            'ラーメン', 'チャーハン', 'カレー', 'キムチ',
+            // デザート・お菓子
+            'アイス', 'チョコ', 'クッキー', 'プリン'
+        ];
+        
+        return foodPatterns.some(pattern => 
+            word.includes(pattern) || pattern.includes(word)
+        );
+    }
+    
+    /**
+     * ビジネス用語キーワード判定
+     */
+    isBusinessTermKeyword(word) {
+        const businessPatterns = [
+            // プロジェクト管理
+            'チーム運営', 'pj進め方', 'プロジェクト進め方', '進捗管理',
+            // 議論・計画
+            '深く議論', '今後の', '方針', '戦略', '計画',
+            // コミュニケーション
+            '情報共有', '連携', '協力', 'フィードバック'
+        ];
+        
+        return businessPatterns.some(pattern => 
+            word.toLowerCase().includes(pattern.toLowerCase()) || 
+            pattern.toLowerCase().includes(word.toLowerCase())
+        );
+    }
+    
+    /**
+     * 🏷️ 特徴語のカテゴリ分類 (Phase 6.6: 日常体験対応)
      */
     categorizeCharacteristicWord(word) {
         const lowerWord = word.toLowerCase();
+        
+        // 🆕 Phase 6.6: 日常体験カテゴリを優先判定
+        if (this.isLocationKeyword(word)) return '場所・地名';
+        if (this.isActivityKeyword(word)) return '活動・体験';
+        if (this.isFoodKeyword(word)) return '食べ物';
+        if (this.isBusinessTermKeyword(word)) return 'ビジネス用語';
         
         // 技術カテゴリ判定
         if (['api', 'mcp', 'llm', 'ai', 'gpt', 'claude'].includes(lowerWord)) return 'AI技術';

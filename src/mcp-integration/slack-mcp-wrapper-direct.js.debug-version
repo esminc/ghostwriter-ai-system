@@ -2,6 +2,7 @@
 // 保守的アプローチ: 固定チャンネルリストによる確実な動作
 // Phase 5.2.1: MCPConnectionManager統合 + 複数チャンネル対応
 // Phase 6: 高度キーワード抽出エンジン統合
+// 🔍 Phase 6.5: etc-spots詳細調査ログ追加版
 
 // 🔧 Phase 5.2.1最適化: 統合MCPマネージャー使用
 const MCPConnectionManager = require('./mcp-connection-manager');
@@ -26,11 +27,12 @@ class SlackMCPWrapperDirect {
             { id: 'C04190NUS07', name: 'its-training', priority: 'medium', limit: 8 },
             { id: 'C04L6UJP739', name: 'its-tech', priority: 'high', limit: 12 },
             { id: 'C03UWJZB80H', name: 'etc-hobby', priority: 'low', limit: 5 },
-            { id: 'C040BKQ8P2L', name: 'etc-spots', priority: 'medium', limit: 15 }
+            { id: 'C040BKQ8P2L', name: 'etc-spots', priority: 'low', limit: 5 }
         ];
         
-        console.log('📱 Slack MCP Wrapper Direct 初期化... (複数チャンネル対応)');
+        console.log('📱 Slack MCP Wrapper Direct 初期化... (複数チャンネル対応 + 詳細調査版)');
         console.log(`📊 対象チャンネル数: ${this.targetChannels.length}`);
+        console.log('🔍 etc-spots詳細調査ログ機能: 有効');
     }
     
     /**
@@ -123,7 +125,7 @@ class SlackMCPWrapperDirect {
     }
     
     /**
-     * 🎯 複数チャンネルからのメッセージ収集 - 保守的アプローチ
+     * 🎯 複数チャンネルからのメッセージ収集 - 保守的アプローチ + 🔍 詳細調査ログ
      */
     async collectTodayMessagesFromMultipleChannels(channels, userId, totalLimit, slackMCPClient) {
         const todayTimestamp = this.getTodayTimestamp();
@@ -131,6 +133,7 @@ class SlackMCPWrapperDirect {
         let remainingLimit = totalLimit;
         
         console.log(`📊 複数チャンネルメッセージ収集開始: ${channels.length}チャンネル`);
+        console.log(`🔍🔍🔍 詳細調査: oldest=${todayTimestamp}, 現在時刻=${new Date().toISOString()}`);
         
         for (const channel of channels) {
             if (remainingLimit <= 0) break;
@@ -153,22 +156,75 @@ class SlackMCPWrapperDirect {
                 
                 if (Array.isArray(messages)) {
                     const userMessages = messages.filter(msg => 
-                        msg.user === userId && 
-                        msg.type === 'message' &&
-                        !msg.subtype
+                    msg.user === userId && 
+                    msg.type === 'message' &&
+                    !msg.subtype
                     ).slice(0, channelLimit); // 指定制限まで
                     
+                    // 🔍🔍🔍 etc-spotsチャンネル専用詳細調査ログ
+                    if (channel.name === 'etc-spots') {
+                        console.log(`🔍🔍🔍 etc-spots詳細調査開始 ==================`);
+                        console.log(`🔍🔍🔍 API呼び出しパラメータ:`);
+                        console.log(`🔍🔍🔍   - channel_id: ${channel.id}`);
+                        console.log(`🔍🔍🔍   - limit: ${channelLimit * 2}`);
+                        console.log(`🔍🔍🔍   - oldest: ${todayTimestamp} (${new Date(parseInt(todayTimestamp) * 1000).toISOString()})`);
+                        console.log(`🔍🔍🔍 API応答:`);
+                        console.log(`🔍🔍🔍   - 全メッセージ数: ${messages.length}`);
+                        console.log(`🔍🔍🔍   - 対象ユーザーメッセージ数: ${userMessages.length}`);
+                        
+                        if (messages.length > 0) {
+                            console.log(`🔍🔍🔍 全メッセージ一覧:`);
+                            messages.forEach((msg, index) => {
+                                const messageTime = new Date(parseFloat(msg.ts) * 1000);
+                                const isTarget = msg.user === userId;
+                                const preview = (msg.text || '').substring(0, 150);
+                                console.log(`🔍🔍🔍   [${index}] ${messageTime.toISOString()} | User: ${msg.user} ${isTarget ? '⭐TARGET' : ''}`);
+                                console.log(`🔍🔍🔍       Type: ${msg.type}, Subtype: ${msg.subtype || 'none'}`);
+                                console.log(`🔍🔍🔍       Text: ${preview}${preview.length >= 150 ? '...' : ''}`);
+                                
+                                // 2024年を含むメッセージの特別検出
+                                if (msg.text && msg.text.includes('2024')) {
+                                    console.log(`🔍🔍🔍       ⚠️ 2024年関連メッセージ検出: ${msg.text}`);
+                                }
+                            });
+                        }
+                        
+                        if (userMessages.length > 0) {
+                            console.log(`🔍🔍🔍 対象ユーザーメッセージ詳細:`);
+                            userMessages.forEach((msg, index) => {
+                                const messageTime = new Date(parseFloat(msg.ts) * 1000);
+                                console.log(`🔍🔍🔍   ユーザーメッセージ[${index}]: ${messageTime.toISOString()}`);
+                                console.log(`🔍🔍🔍     内容: ${msg.text || 'テキストなし'}`);
+                            });
+                        }
+                        
+                        console.log(`🔍🔍🔍 etc-spots詳細調査終了 ==================`);
+                    }
+                    
+                    // 🆕 Phase 6.5: 詳細ログ追加（etc-spots問題調査用）
+                    const totalChannelMessages = messages.length;
+                    const userSpecificMessages = messages.filter(msg => msg.user === userId).length;
+                    
                     userMessages.forEach(msg => {
-                        allMessages.push({
-                            ...msg,
+                    allMessages.push({
+                        ...msg,
                             channel_name: channel.name,
                             channel_id: channel.id,
                             channel_priority: channel.priority
                         });
-                    });
-                    
-                    remainingLimit -= userMessages.length;
-                    console.log(`   ✅ ${channel.name}: ${userMessages.length}件取得`);
+                });
+                
+                remainingLimit -= userMessages.length;
+                console.log(`   ✅ ${channel.name}: ${userMessages.length}件取得 (全${totalChannelMessages}件中ユーザー${userSpecificMessages}件)`);
+                
+                // etc-spotsチャンネルの場合は追加詳細ログ
+                if (channel.name === 'etc-spots' && userMessages.length > 0) {
+                    const latestMessage = userMessages[0];
+                    const messageTime = new Date(parseFloat(latestMessage.ts) * 1000).toISOString();
+                    const messagePreview = (latestMessage.text || '').substring(0, 100);
+                    console.log(`   📍 etc-spots詳細: 最新メッセージ時刻=${messageTime}`);
+                    console.log(`   📍 メッセージ内容プレビュー: ${messagePreview}...`);
+                }
                 } else {
                     console.log(`   ⚠️ ${channel.name}: メッセージ形式エラー`);
                 }
@@ -247,13 +303,14 @@ class SlackMCPWrapperDirect {
     }
     
     /**
-     * ⏰ 今日のタイムスタンプ取得 - 🔧 Phase 6.5: 48時間範囲拡大対応
+     * ⏰ 今日のタイムスタンプ取得 - 🔧 Phase 6.5: 48時間に拡大してより多くの最新メッセージを確実に取得
      */
     getTodayTimestamp() {
         const now = new Date();
-        // 過去48時間のメッセージを取得するように変更（より広範囲の情報収集）
+        // 🆕 Phase 6.5修正: 過去48時間のメッセージを取得（さらなる取得範囲拡大）
         const fortyEightHoursAgo = new Date(now.getTime() - (48 * 60 * 60 * 1000));
         console.log(`🕐 メッセージ取得範囲拡大: ${fortyEightHoursAgo.toISOString()} から ${now.toISOString()}`);
+        console.log(`🔍🔍🔍 詳細調査: oldest値=${Math.floor(fortyEightHoursAgo.getTime() / 1000)}`);
         return Math.floor(fortyEightHoursAgo.getTime() / 1000).toString();
     }
     
