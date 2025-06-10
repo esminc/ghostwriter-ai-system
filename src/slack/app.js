@@ -43,6 +43,27 @@ class GhostWriterSlackBot {
             next();
         });
 
+        // ヘルスチェックエンドポイント (Renderスリープ回避用)
+        this.receiver.app.get('/health', (req, res) => {
+            const uptimeSeconds = process.uptime();
+            const uptimeFormatted = `${Math.floor(uptimeSeconds / 3600)}h ${Math.floor((uptimeSeconds % 3600) / 60)}m ${Math.floor(uptimeSeconds % 60)}s`;
+            
+            res.status(200).json({
+                status: 'healthy',
+                timestamp: new Date().toISOString(),
+                uptime: uptimeSeconds,
+                uptimeFormatted: uptimeFormatted,
+                service: 'ghostwriter-slack-bot',
+                version: process.env.npm_package_version || '0.1.0',
+                environment: process.env.NODE_ENV || 'development',
+                memory: {
+                    used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+                    total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024)
+                },
+                phase: 'Phase 6.6+ (Complete) + Health Check'
+            });
+        });
+
         // Slack Appの初期化 (ExpressReceiver使用)
         this.app = new App({
             token: process.env.SLACK_BOT_TOKEN,
