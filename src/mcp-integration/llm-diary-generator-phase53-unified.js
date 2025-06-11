@@ -525,14 +525,400 @@ class LLMDiaryGeneratorPhase53Unified {
     }
     
     /**
-     * 🎨 AI自由生成用の創造的プロンプト構築
+     * 🆕 Step 2: esa記事内容抽出機能（強化版）
+     */
+    extractEsaArticleContent(esaData) {
+        console.log(`📋 esa記事内容抽出開始 (Step 2: 精密化版)`);
+        
+        if (!esaData || esaData.status !== 'available' || !esaData.posts) {
+            console.log(`⚠️ esa記事データが利用不可: ${esaData?.status || 'no_data'}`);
+            return {
+                recentTopics: [],
+                recentActivities: [],
+                todayRelevantContent: [],
+                extractedKeywords: [],
+                contentSummary: 'esa記事データなし'
+            };
+        }
+        
+        const posts = esaData.posts;
+        const today = new Date();
+        const todayStr = today.toISOString().split('T')[0]; // YYYY-MM-DD
+        
+        console.log(`📋 esa記事分析 (Step 2): ${posts.length}件の記事を処理中`);
+        
+        // 🎯 今日の日付に関連する記事を特定
+        const todayRelevantPosts = posts.filter(post => {
+            if (!post.updated_at && !post.created_at) return false;
+            
+            const postDate = new Date(post.updated_at || post.created_at);
+            const postDateStr = postDate.toISOString().split('T')[0];
+            
+            // 今日または昨日の記事を対象
+            const yesterday = new Date(today);
+            yesterday.setDate(yesterday.getDate() - 1);
+            const yesterdayStr = yesterday.toISOString().split('T')[0];
+            
+            return postDateStr === todayStr || postDateStr === yesterdayStr;
+        });
+        
+        console.log(`🎯 今日関連記事: ${todayRelevantPosts.length}件 (今日: ${todayStr})`);
+        
+        // 🔍 記事タイトルからキーワード抽出
+        const extractedKeywords = new Set();
+        const recentTopics = new Set();
+        const recentActivities = new Set();
+        
+        // すべての記事（最近の記事を優先）から情報抽出
+        const analysisTargets = [...todayRelevantPosts, ...posts.slice(0, 5)];
+        
+        analysisTargets.forEach(post => {
+            if (post.name) {
+                // タイトルからキーワードを抽出
+                const titleKeywords = this.extractKeywordsFromTitle(post.name);
+                titleKeywords.forEach(keyword => extractedKeywords.add(keyword));
+                
+                // 活動内容を推測
+                const activities = this.inferActivitiesFromTitle(post.name);
+                activities.forEach(activity => recentActivities.add(activity));
+                
+                // トピックを抽出
+                const topics = this.extractTopicsFromTitle(post.name);
+                topics.forEach(topic => recentTopics.add(topic));
+            }
+            
+            // 🆕 Step 2: 記事本文からのキーワード抽出（既存記事に有効）
+            if (post.body_md) {
+                const bodyKeywords = this.extractKeywordsFromBody(post.body_md);
+                bodyKeywords.forEach(keyword => extractedKeywords.add(keyword));
+                
+                const bodyActivities = this.inferActivitiesFromBody(post.body_md);
+                bodyActivities.forEach(activity => recentActivities.add(activity));
+                
+                const bodyTopics = this.extractTopicsFromBody(post.body_md);
+                bodyTopics.forEach(topic => recentTopics.add(topic));
+            }
+            
+            // カテゴリからも情報抽出
+            if (post.category && !post.category.includes('AI代筆日記')) {
+                const categoryKeywords = this.extractKeywordsFromCategory(post.category);
+                categoryKeywords.forEach(keyword => extractedKeywords.add(keyword));
+            }
+        });
+        
+        const result = {
+            recentTopics: Array.from(recentTopics).slice(0, 12), // 🆕 増量
+            recentActivities: Array.from(recentActivities).slice(0, 10), // 🆕 増量
+            todayRelevantContent: todayRelevantPosts.map(p => ({
+                title: p.name,
+                category: p.category,
+                updated_at: p.updated_at,
+                hasBody: !!p.body_md // 🆕 追加情報
+            })),
+            extractedKeywords: Array.from(extractedKeywords).slice(0, 18), // 🆕 増量
+            contentSummary: `${posts.length}件の記事分析完了、今日関連${todayRelevantPosts.length}件特定 (Step 2強化)`
+        };
+        
+        console.log(`✅ esa記事内容抽出完了 (Step 2):`);
+        console.log(`   - トピック: ${result.recentTopics.length}個`);
+        console.log(`   - 活動: ${result.recentActivities.length}個`);
+        console.log(`   - キーワード: ${result.extractedKeywords.length}個`);
+        console.log(`   - 今日関連記事: ${result.todayRelevantContent.length}件`);
+        
+        return result;
+    }
+    
+    /**
+     * 📝 Step 2: 記事本文からキーワードを抽出
+     */
+    extractKeywordsFromBody(bodyMd) {
+        const keywords = new Set();
+        
+        // 技術用語パターン
+        const techPatterns = [
+            /Claude Code/gi, /ccusage/gi, /npm/gi, /Proプラン/gi,
+            /トークン/g, /コスト/g, /USD/gi, /API/gi,
+            /メンタルモデル/g, /サービス/g, /リカバリ/g, /再検討/g,
+            /チーム/g, /共有/g
+        ];
+        
+        // 日常・業務パターン
+        const dailyPatterns = [
+            /評価面談/g, /要求/g, /確認/g, /チョットチガッテイタ/g,
+            /仕切り直し/g, /スクフェス/g, /イベント/g,
+            /福井本社/g, /お客さん/g, /知り合い/g, /楽しみ/g
+        ];
+        
+        // 特定のフレーズパターン
+        const phrasePatterns = [
+            /大丈夫なのかなあ/g, /大事/g, /素早く/g,
+            /やることやったこと/g, /TIL/g, /こんな気分/g
+        ];
+        
+        const allPatterns = [...techPatterns, ...dailyPatterns, ...phrasePatterns];
+        
+        allPatterns.forEach(pattern => {
+            const matches = bodyMd.match(pattern);
+            if (matches) {
+                matches.forEach(match => {
+                    if (match.length > 1) {
+                        keywords.add(match.trim());
+                    }
+                });
+            }
+        });
+        
+        return Array.from(keywords);
+    }
+    
+    /**
+     * 🎯 Step 2: 記事本文から活動内容を推測
+     */
+    inferActivitiesFromBody(bodyMd) {
+        const activities = [];
+        
+        const activityMapping = {
+            '評価面談': '評価面談の完了',
+            '要求の確認': '要求理解・調整作業',
+            'Claude Code': 'Claude Code の利用検証・コスト確認',
+            'ccusage': 'トークン使用量分析',
+            'メンタルモデル': 'チーム内概念共有の重要性確認',
+            'スクフェス': 'スクフェス関連イベント・ネットワーキング',
+            '福井本社': '福井本社への訪問予定',
+            'お客さん': '顧客との関係構築・交流',
+            '仕切り直し': '計画の見直し・再調整',
+            'TIL': '学習・気づきの整理',
+            '楽しみ': '将来への期待・前向きな計画'
+        };
+        
+        Object.entries(activityMapping).forEach(([keyword, activity]) => {
+            if (bodyMd.includes(keyword)) {
+                activities.push(activity);
+            }
+        });
+        
+        return activities;
+    }
+    
+    /**
+     * 🏷️ Step 2: 記事本文からトピックを抽出
+     */
+    extractTopicsFromBody(bodyMd) {
+        const topics = [];
+        
+        const topicMapping = {
+            '評価面談': '人事・キャリア',
+            'Claude Code': 'AI・開発ツール',
+            'メンタルモデル': 'チーム・概念共有',
+            'リカバリ': '問題解決・復旧',
+            'スクフェス': 'エンターテイメント・ネットワーキング',
+            '福井本社': '拠点間連携・出張',
+            'トークン': 'API・コスト管理',
+            '大丈夫なのかなあ': '不安・検証の必要性',
+            '楽しみ': '期待・前向きな気持ち',
+            '仕切り直し': '計画変更・調整'
+        };
+        
+        Object.entries(topicMapping).forEach(([keyword, topic]) => {
+            if (bodyMd.includes(keyword)) {
+                topics.push(topic);
+            }
+        });
+        
+        return topics;
+    }
+    
+    /**
+     * 🔍 タイトルからキーワードを抽出（Step 2: 精密化版）
+     */
+    extractKeywordsFromTitle(title) {
+        const keywords = new Set();
+        
+        // 🆕 Step 2: より包括的な技術用語パターン
+        const techPatterns = [
+            /Claude\s*Code?/gi, /GPT-?4o?/gi, /OpenAI/gi, /AI/gi,
+            /JavaScript/gi, /React/gi, /Node\.?js/gi, /Python/gi,
+            /API/gi, /MCP/gi, /Slack/gi, /esa/gi,
+            /システム/g, /開発/g, /実装/g, /テスト/g, /デバッグ/g,
+            /プログラム/g, /コード/g, /アプリ/g, /メンタルモデル/g,
+            /ccusage/g, /npm/g, /プラン/g, /トークン/g
+        ];
+        
+        // 🆕 Step 2: より包括的な日常体験・業務パターン
+        const dailyPatterns = [
+            /評価面談/g, /面談/g, /会議/g, /ミーティング/g,
+            /腰/g, /峠/g, /体調/g, /健康/g, /調子/g,
+            /スクフェス/g, /ゲーム/g, /趣味/g, /イベント/g,
+            /福井/g, /本社/g, /出張/g, /移動/g, /お客さん/g,
+            /要求/g, /確認/g, /レビュー/g, /相談/g, /仕切り直し/g,
+            /チーム/g, /共有/g, /リカバリ/g, /再検討/g,
+            /知り合い/g, /関連/g, /楽しみ/g
+        ];
+        
+        // 🆕 Step 2: 感情・状態表現パターン
+        const emotionalPatterns = [
+            /Done/gi, /完成/g, /チョット/g, /チガッテイタ/g,
+            /大丈夫/g, /素早く/g, /楽しみ/g, /やったこと/g,
+            /峠を越え/g, /気分/g
+        ];
+        
+        const allPatterns = [...techPatterns, ...dailyPatterns, ...emotionalPatterns];
+        
+        allPatterns.forEach(pattern => {
+            const matches = title.match(pattern);
+            if (matches) {
+                matches.forEach(match => {
+                    if (match.length > 1) {
+                        keywords.add(match.trim());
+                    }
+                });
+            }
+        });
+        
+        // 🆕 Step 2: コロン区切りでの追加抽出
+        if (title.includes(':')) {
+            const colonParts = title.split(':');
+            colonParts.forEach(part => {
+                const trimmed = part.trim();
+                if (trimmed.length > 2 && !trimmed.includes('okamoto-takuya')) {
+                    keywords.add(trimmed);
+                }
+            });
+        }
+        
+        return Array.from(keywords);
+    }
+    
+    /**
+     * 🎯 タイトルから活動内容を推測（Step 2: 精密化版）
+     */
+    inferActivitiesFromTitle(title) {
+        const activities = [];
+        
+        // 🆕 Step 2: より詳細な活動マッピング
+        const activityMapping = {
+            '評価面談': '評価面談の実施・完了',
+            '面談': 'チーム面談',
+            '要求': '要求事項の確認・見直し作業',
+            '確認': '各種確認・レビュー作業', 
+            'Claude Code': 'Claude Code の検討・利用検証',
+            'スクフェス': 'スクールアイドルフェスティバル関連活動',
+            '腰': '体調管理・健康状態の確認',
+            '峠': '課題・困難の克服',
+            '福井': '福井本社での業務・訪問',
+            '本社': '本社業務・拠点間連携',
+            'お客さん': '顧客対応・関係構築',
+            '開発': 'システム開発作業',
+            '実装': '機能実装作業',
+            'AI': 'AI技術の活用・研究',
+            'システム': 'システム関連作業',
+            'チーム': 'チーム活動・連携業務',
+            'メンタルモデル': 'チーム内概念共有・議論',
+            'Done': 'タスク完了・成果達成',
+            '完成': 'プロジェクト・作品完成',
+            '仕切り直し': '計画見直し・再スタート',
+            'イベント': 'イベント参加・関連活動'
+        };
+        
+        Object.entries(activityMapping).forEach(([keyword, activity]) => {
+            if (title.includes(keyword)) {
+                activities.push(activity);
+            }
+        });
+        
+        // 🆕 Step 2: コロン区切りでの活動推測
+        if (title.includes(':')) {
+            const mainPart = title.split(':').slice(1).join(':').trim();
+            if (mainPart.includes('峠を越え')) {
+                activities.push('健康問題の改善・回復');
+            }
+            if (mainPart.includes('完成')) {
+                activities.push('作業・プロジェクトの完了');
+            }
+        }
+        
+        return activities;
+    }
+    
+    /**
+     * 🏷️ タイトルからトピックを抽出（Step 2: 精密化版）
+     */
+    extractTopicsFromTitle(title) {
+        const topics = [];
+        
+        // 🆕 Step 2: より詳細なトピックマッピング
+        const topicMapping = {
+            '評価': '人事評価・面談',
+            '面談': '人事評価・面談', 
+            '要求': '要求分析・確認',
+            'Claude': 'AI・Claude活用',
+            'Code': 'プログラミング・開発ツール',
+            'スクフェス': 'ゲーム・エンターテイメント',
+            '腰': '健康管理・体調',
+            '峠': '課題解決・克服',
+            '福井': '地域・拠点間連携',
+            '本社': '本社業務・組織運営',
+            'お客さん': '顧客関係・ビジネス',
+            'チーム': 'チームワーク・協力',
+            'メンタルモデル': 'チーム内概念・共通理解',
+            'リカバリ': '問題解決・復旧',
+            '再検討': '計画見直し・改善',
+            'プラン': 'サービス・プラン管理',
+            'トークン': '技術・API利用',
+            'Done': '成果・達成',
+            '完成': '完了・達成感',
+            '楽しみ': '期待・前向きな気持ち'
+        };
+        
+        Object.entries(topicMapping).forEach(([keyword, topic]) => {
+            if (title.includes(keyword)) {
+                topics.push(topic);
+            }
+        });
+        
+        // 🆕 Step 2: コロン区切りでの特別トピック抽出
+        if (title.includes(':')) {
+            const mainPart = title.split(':').slice(1).join(':').trim();
+            if (mainPart.includes('峠を越え')) {
+                topics.push('健康回復・改善');
+            }
+        }
+        
+        return topics;
+    }
+    
+    /**
+     * 📂 カテゴリからキーワードを抽出
+     */
+    extractKeywordsFromCategory(category) {
+        const keywords = [];
+        
+        // カテゴリパスを分解
+        const categoryParts = category.split('/').filter(part => 
+            part && !part.match(/^\d{4}$/) && !part.match(/^\d{2}$/) // 年月日を除外
+        );
+        
+        categoryParts.forEach(part => {
+            if (part.length > 1 && !part.includes('AI代筆日記')) {
+                keywords.push(part);
+            }
+        });
+        
+        return keywords;
+    }
+
+    /**
+     * 🎨 AI自由生成用の創造的プロンプト構築（Step 1: esa統合版）
      */
     buildCreativePrompt(userName, contextData, today) {
-        console.log(`🎨 AI自由生成プロンプト構築: ${userName}`);
+        console.log(`🎨 AI自由生成プロンプト構築 (esa+Slack統合): ${userName}`);
         
-        // 🔍 動的特徴語抽出（SlackKeywordExtractorの新機能を活用）
+        // 🆕 Step 1: esa記事内容抽出
+        const esaContent = this.extractEsaArticleContent(contextData.esaData);
+        
+        // 🔍 Slackデータからの動的特徴語抽出（既存ロジック）
         const slackData = contextData.slackData;
-        const recentWords = [];
+        const slackWords = [];
         
         if (slackData && slackData.todayMessages) {
             // 📱 Slackメッセージから動的特徴語を抽出
@@ -552,22 +938,32 @@ class LLMDiaryGeneratorPhase53Unified {
                 !this.isDailyExperienceKeyword(word)
             );
             
-            // 🎯 Phase 6.6: 日常体験キーワードを優先的に配置
-            recentWords.push(...dailyExperienceWords.slice(0, 6)); // 日常体験を最大6個
-            recentWords.push(...technicalWords.slice(0, 4)); // 技術系を最大4個
+            // 🎯 Slackキーワード配置（50%重み分）
+            slackWords.push(...dailyExperienceWords.slice(0, 3)); // 日常体験を最大3個
+            slackWords.push(...technicalWords.slice(0, 2)); // 技術系を最大2個
             
-            console.log(`🎯 Phase 6.6キーワード選択: 日常体験${dailyExperienceWords.length}個, 技術系${technicalWords.length}個`);
+            console.log(`🎯 Slackキーワード選択: 日常体験${dailyExperienceWords.length}個, 技術系${technicalWords.length}個`);
         }
         
-        // 🎯 活動内容の推測（動的）
+        // 🆕 Step 1: esa + Slack統合キーワード（50:50バランス）
+        const recentWords = [];
+        
+        // esa記事キーワード（50%重み）
+        recentWords.push(...esaContent.extractedKeywords.slice(0, 5));
+        recentWords.push(...esaContent.recentTopics.slice(0, 3));
+        
+        // Slackキーワード（50%重み）
+        recentWords.push(...slackWords);
+        
+        // 🎯 統合活動内容（esa + Slack）
         const activities = [];
+        
+        // esa記事からの活動（50%重み）
+        activities.push(...esaContent.recentActivities.slice(0, 3));
+        
+        // Slackからの活動（50%重み）
         if (slackData && slackData.activityAnalysis?.keyActivities) {
-            activities.push(...slackData.activityAnalysis.keyActivities.slice(0, 3));
-        } else if (slackData && slackData.todayMessages) {
-            // フォールバック: 特徴語から活動を推測
-            const SlackKeywordExtractor = require('./slack-keyword-extractor');
-            const extractor = new SlackKeywordExtractor();
-            activities.push(...extractor.inferActivitiesFromCharacteristicWords(slackData.todayMessages));
+            activities.push(...slackData.activityAnalysis.keyActivities.slice(0, 2));
         }
         
         // 🎯 ユーザープロフィール情報の活用
@@ -577,30 +973,31 @@ class LLMDiaryGeneratorPhase53Unified {
             .filter(cat => !cat.includes('AI代筆日記') && !cat.includes('Phase'))
             .slice(0, 3);
         
-        // 🎨 創造的プロンプトの構築（Phase 6.6: 日常体験強化版）
+        // 🎨 創造的プロンプトの構築（Step 1: esa統合強化版）
         const prompt = `あなたは${userName}として、今日(${today})の日記を親しみやすい口語で書いてください。
 
 【利用可能な情報】
-- 今日話題になった特徴的な単語: ${recentWords.length > 0 ? recentWords.join(', ') : '一般的な作業用語'}
+- esa記事から抽出した関心事: ${esaContent.extractedKeywords.slice(0, 8).join(', ') || 'なし'}
+- 今日のSlack特徴語: ${slackWords.join(', ') || 'なし'}
 - 主な活動: ${activities.length > 0 ? activities.join(', ') : '日常的な業務'}
 - ユーザーの傾向: ${userStyleHints.length > 0 ? userStyleHints.join(', ') : '技術的な作業'}
 
 【重要な制約・スタイル指示】
 1. 機械的な表現は絶対に避ける（「取り組みました」「活発な議論を行いました」等の固定表現禁止）
 2. 人間らしい口語表現を多用する（「ちょっと手間取った」「なんとかうまくいった感じ」等）
-3. 🆕 Phase 6.6: 特徴的な単語の中でも日常体験（食べ物、場所、活動）を積極的に使用
-4. 具体的な体験を詳しく描写する（「たい焼きを食べた」「アフタヌーンティーを楽しんだ」等）
+3. 🆕 esa記事の関心事とSlack特徴語を同等に重視して使用（50:50バランス）
+4. 具体的な体験を詳しく描写する（「評価面談があった」「Claude Codeを検討した」「腰の調子が気になった」等）
 5. 感情表現を豊かに（驚き、満足感、ちょっとした困惑等）
 
 【文体例】
-良い例: "今日は合宿でお客さんとの議論が盛り上がって、休憩でたい焼き食べたのが意外においしかった。アフタヌーンティーも体験できて、なんだか充実した感じ。北陸新幹線で帰る時にはちょっと疲れてたけど、いい経験になったなぁ。"
-悪い例: "本日は合宿に参加し、お客様との議論を実施しました。休憩時間にはたい焼きを摂取しました。"
+良い例: "今日は評価面談があって、ちょっと緊張したけどなんとか終わった。あとClaude Codeの話も出てきて、なかなか興味深い感じ。腰の調子もちょっと気になってたけど、福井本社の件でバタバタしてたからかな。"
+悪い例: "本日は評価面談を実施しました。Claude Codeについて検討しました。"
 
 【構成】
 ## ${today}の振り返り
 
 **やったこと**
-[今日の活動を人間らしい口語で記述、日常体験を具体的に含める]
+[今日の活動を人間らしい口語で記述、esa記事の内容とSlack活動を具体的に含める]
 
 **TIL (Today I Learned)**
 [学んだことを自然な表現で]
@@ -608,11 +1005,12 @@ class LLMDiaryGeneratorPhase53Unified {
 **こんな気分**
 [感情や気持ちを率直に]
 
-親しみやすく、具体的な体験を含む愛嬌のある文章で書いてください。特に食べ物、場所、活動については詳しく描写してください。`;
+親しみやすく、具体的な体験を含む愛嬌のある文章で書いてください。esa記事の関心事とSlack特徴語の両方を自然に織り込んでください。`;
 
-        console.log(`✅ AI自由生成プロンプト構築完了`);
-        console.log(`   - 特徴語: ${recentWords.slice(0, 5).join(', ')}`);
-        console.log(`   - 活動: ${activities.slice(0, 2).join(', ')}`);
+        console.log(`✅ AI自由生成プロンプト構築完了（esa+Slack統合）`);
+        console.log(`   - esa関心事: ${esaContent.extractedKeywords.slice(0, 5).join(', ')}`);
+        console.log(`   - Slack特徴語: ${slackWords.slice(0, 5).join(', ')}`);
+        console.log(`   - 統合活動: ${activities.slice(0, 3).join(', ')}`);
         
         return prompt;
     }
