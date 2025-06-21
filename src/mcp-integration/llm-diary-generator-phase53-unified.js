@@ -318,7 +318,7 @@ class LLMDiaryGeneratorPhase53Unified {
                         name: 'esa_list_posts',
                         arguments: {
                             q: query,
-                            per_page: 10,
+                            per_page: 50, // 🆕 72時間以内の記事を確実に取得するため増量
                             sort: 'updated',
                             order: 'desc'
                         }
@@ -328,7 +328,7 @@ class LLMDiaryGeneratorPhase53Unified {
                         const searchData = JSON.parse(searchResult.content[0].text);
                         
                         if (searchData.posts && searchData.posts.length > 0) {
-                            allPosts.push(...searchData.posts.slice(0, 3));
+                            allPosts.push(...searchData.posts.slice(0, 10)); // 🆕 72時間以内の記事を確実に含めるため増量
                             postsCount += searchData.posts.length;
                             
                             queryResults.push({
@@ -561,6 +561,16 @@ class LLMDiaryGeneratorPhase53Unified {
         
         console.log(`🎯 72時間以内記事: ${todayRelevantPosts.length}件 (古いデータ除外)`);
         
+        // 🔍 72時間以内記事の詳細ログ
+        if (todayRelevantPosts.length > 0) {
+            console.log(`📋 72時間以内記事詳細:`);
+            todayRelevantPosts.slice(0, 5).forEach((post, index) => {
+                const postDate = new Date(post.updated_at || post.created_at);
+                const hoursAgo = Math.floor((today.getTime() - postDate.getTime()) / (60 * 60 * 1000));
+                console.log(`   ${index + 1}. "${post.name}" (${hoursAgo}時間前)`);
+            });
+        }
+        
         // 🔍 記事タイトルからキーワード抽出
         const extractedKeywords = new Set();
         const recentTopics = new Set();
@@ -692,19 +702,56 @@ class LLMDiaryGeneratorPhase53Unified {
     }
     
     /**
-     * 🎯 Step 2: 記事本文から活動内容を推測
+     * 🎯 Step 2: 記事本文から活動内容を推測（構造化日記対応強化）
      */
     inferActivitiesFromBody(bodyMd) {
         const activities = [];
         
-        // 🚨 固定活動テンプレート削除 - 完全動的抽出のみ使用
-        // 古い固定マッピングを削除し、リアルタイムデータのみに依存
+        // 🆕 やることやったこと セクションの解析
+        const yaruKotoMatch = bodyMd.match(/やることやったこと[\s\S]*?(?=##|TIL|こんな気分|$)/i);
+        if (yaruKotoMatch) {
+            const yaruKotoSection = yaruKotoMatch[0];
+            // 箇条書き項目の抽出
+            const items = yaruKotoSection.match(/[-*]?\s*(.+)/g) || [];
+            items.forEach(item => {
+                const cleaned = item.replace(/[-*\[\]x\s]/g, '').trim();
+                if (cleaned.length > 5 && !cleaned.includes('やることやったこと')) {
+                    activities.push(`${cleaned}の実施`);
+                }
+            });
+        }
+        
+        // 🆕 TIL セクションの解析
+        const tilMatch = bodyMd.match(/TIL[\s\S]*?(?=##|やることやったこと|こんな気分|$)/i);
+        if (tilMatch) {
+            activities.push('学習・気づきの整理');
+            const tilSection = tilMatch[0];
+            // 学習内容の詳細抽出
+            const learnings = tilSection.match(/[-*]?\s*(.+)/g) || [];
+            learnings.forEach(learning => {
+                const cleaned = learning.replace(/[-*\s]/g, '').trim();
+                if (cleaned.length > 10 && !cleaned.includes('TIL')) {
+                    activities.push(`${cleaned.substring(0, 30)}について学習`);
+                }
+            });
+        }
+        
+        // 🆕 こんな気分 セクションから感情・振り返り活動を抽出
+        const kimochi = bodyMd.match(/こんな気分[\s\S]*?(?=##|$)/i);
+        if (kimochi) {
+            activities.push('一日の振り返り・感情整理');
+        }
+        
+        // 一般的な活動パターン（既存）
         const activityMapping = {
-            // 一般的な学習活動のみ保持（具体的な固有名詞は削除）
-            'TIL': '学習・気づきの整理',
-            '学習': '学習活動',
-            '勉強': '学習活動'
-            // 'スクフェス', 'ハッカソン', '一斉会議'等の固定パターンは完全削除
+            '会議': 'ミーティング・会議参加',
+            '1on1': '1on1実施',
+            '行脚': '巡回・訪問活動',
+            'リファクタリング': 'コード改善・リファクタリング',
+            '話し合い': 'チーム議論・協議',
+            '立ち話': 'カジュアルコミュニケーション',
+            '説明': 'プレゼンテーション・説明',
+            '開発': 'システム開発作業'
         };
         
         Object.entries(activityMapping).forEach(([keyword, activity]) => {
@@ -713,7 +760,7 @@ class LLMDiaryGeneratorPhase53Unified {
             }
         });
         
-        return activities;
+        return activities.slice(0, 8); // 最大8個まで
     }
     
     /**
@@ -973,39 +1020,47 @@ class LLMDiaryGeneratorPhase53Unified {
             .filter(cat => !cat.includes('AI代筆日記') && !cat.includes('Phase'))
             .slice(0, 3);
         
-        // 🎨 創造的プロンプトの構築（Step 1: esa統合強化版）
+        // 🎨 創造的プロンプトの構築（esa記事詳細活用強化版）
         const prompt = `あなたは${userName}として、今日(${today})の日記を親しみやすい口語で書いてください。
 
 【利用可能な情報】
-- esa記事から抽出した関心事: ${esaContent.extractedKeywords.slice(0, 8).join(', ') || 'なし'}
-- 今日のSlack特徴語: ${slackWords.join(', ') || 'なし'}
-- 主な活動: ${activities.length > 0 ? activities.join(', ') : '日常的な業務'}
-- ユーザーの傾向: ${userStyleHints.length > 0 ? userStyleHints.join(', ') : '技術的な作業'}
+- 📋 esa記事から抽出した関心事: ${esaContent.extractedKeywords.slice(0, 8).join(', ') || 'なし'}
+- 📋 esa記事の活動内容: ${esaContent.recentActivities.slice(0, 5).join(', ') || 'なし'}
+- 📋 72時間以内のesa記事: ${esaContent.todayRelevantContent.length}件
+- 📱 今日のSlack特徴語: ${slackWords.join(', ') || 'なし'}
+- 🎯 主な活動: ${activities.length > 0 ? activities.join(', ') : '日常的な業務'}
+- 👤 ユーザーの傾向: ${userStyleHints.length > 0 ? userStyleHints.join(', ') : '技術的な作業'}
+
+【最重要】最近のesa記事の具体的内容を積極的に参照・活用してください：
+${esaContent.todayRelevantContent.length > 0 ? 
+  esaContent.todayRelevantContent.slice(0, 3).map(post => `- 「${post.title}」`).join('\n') :
+  '- 最近の記事情報なし'
+}
 
 【重要な制約・スタイル指示】
 1. 機械的な表現は絶対に避ける（「取り組みました」「活発な議論を行いました」等の固定表現禁止）
 2. 人間らしい口語表現を多用する（「ちょっと手間取った」「なんとかうまくいった感じ」等）
-3. 🆕 esa記事の関心事とSlack特徴語を同等に重視して使用（50:50バランス）
-4. 具体的な体験を詳しく描写する（「評価面談があった」「Claude Codeを検討した」「システム開発が進んだ」等）
+3. 🆕 esa記事の具体的活動内容を最優先で反映（行脚、1on1、リファクタリング等）
+4. 具体的な体験を詳しく描写する（「○○さんとの1on1」「リファクタリングの話し合い」等）
 5. 感情表現を豊かに（驚き、満足感、ちょっとした困惑等）
 
 【文体例】
-良い例: "今日は評価面談があって、ちょっと緊張したけどなんとか終わった。あとClaude Codeの話も出てきて、なかなか興味深い感じ。いろいろと新しい発見があって充実した一日だった。"
-悪い例: "本日は評価面談を実施しました。Claude Codeについて検討しました。"
+良い例: "今日は山下さんと高原さんの行脚があって、なかなか充実した一日だった。チームでリファクタリングの話も出て、やりたいことはいっぱいあるけど、POに説明するとなると途端にハードルが上がるなって実感した。"
+悪い例: "本日は業務を実施しました。チーム活動を行いました。"
 
 【構成】
 ## ${today}の振り返り
 
 **やったこと**
-[今日の活動を人間らしい口語で記述、esa記事の内容とSlack活動を具体的に含める]
+[esa記事の具体的活動（行脚、1on1、会議等）を中心に、人間らしい口語で記述]
 
 **TIL (Today I Learned)**
-[学んだことを自然な表現で]
+[学んだことを自然な表現で、esa記事のTIL内容も参考に]
 
 **こんな気分**
-[感情や気持ちを率直に]
+[感情や気持ちを率直に、esa記事の「こんな気分」も参考に]
 
-親しみやすく、具体的な体験を含む愛嬌のある文章で書いてください。esa記事の関心事とSlack特徴語の両方を自然に織り込んでください。`;
+親しみやすく、具体的な体験を含む愛嬌のある文章で書いてください。esa記事の具体的内容を最優先で反映し、Slack活動と組み合わせてください。`;
 
         console.log(`✅ AI自由生成プロンプト構築完了（esa+Slack統合）`);
         console.log(`   - esa関心事: ${esaContent.extractedKeywords.slice(0, 5).join(', ')}`);
