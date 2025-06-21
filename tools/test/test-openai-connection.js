@@ -2,7 +2,7 @@
 
 // OpenAI API接続テスト
 const dotenv = require('dotenv');
-const OpenAIClient = require('./src/ai/openai-client');
+const OpenAIClient = require('../../src/ai/openai-client');
 
 // 環境変数の読み込み
 dotenv.config();

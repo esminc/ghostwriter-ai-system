@@ -1,7 +1,7 @@
 // AI統合タイトル生成テスト
 
 require('dotenv').config();
-const LLMDiaryGeneratorPhase53Unified = require('./src/mcp-integration/llm-diary-generator-phase53-unified');
+const LLMDiaryGeneratorPhase53Unified = require('../../src/mcp-integration/llm-diary-generator-phase53-unified');
 
 async function testAITitleGeneration() {
     console.log('🧪 AI統合タイトル生成テスト開始');

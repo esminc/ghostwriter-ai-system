@@ -1,7 +1,7 @@
 // 最近のesa記事取得テスト（72時間制限確認）
 
 require('dotenv').config();
-const LLMDiaryGeneratorPhase53Unified = require('./src/mcp-integration/llm-diary-generator-phase53-unified');
+const LLMDiaryGeneratorPhase53Unified = require('../../src/mcp-integration/llm-diary-generator-phase53-unified');
 
 async function testEsaRecentArticles() {
     console.log('🧪 最近のesa記事取得テスト開始');
