@@ -57,19 +57,21 @@ class LLMDiaryGeneratorPhase53Unified {
         }
     }
 
-    // 🆕 Slackデータ統合取得メソッド（新規追加）
+    // 🆕 Slackデータ統合取得メソッド（動的抽出100%モード）
     async getSlackDataIntegrated(userName, options = {}) {
         console.log(`📱 Slack統合データ取得: ${userName}`);
+        console.log(`🚨 重要: 動的抽出100%モード (辞書0%)`);
         
         try {
             // SlackユーザーIDが提供されている場合は直接使用（Phase 4で実証済み）
             if (options.slackUserId) {
-                console.log(`🎯 SlackユーザーID直接使用（Phase 4実証方式）: ${options.slackUserId}`);
+                console.log(`🎯 SlackユーザーID直接使用（動的抽出モード）: ${options.slackUserId}`);
                 const slackData = await this.slackMCPWrapper.getUserSlackDataByUserId(options.slackUserId, {
                     includeThreads: true,
                     targetChannelId: 'C05JRUFND9P', // #its-wkwk-general
                     messageLimit: 100,
-                    secureMode: true
+                    secureMode: true,
+                    analysisMode: 'diary_generation_dynamic_only' // 🆕 日記生成用フラグ
                 });
                 
                 return slackData;
@@ -302,7 +304,6 @@ class LLMDiaryGeneratorPhase53Unified {
 
             const searchQueries = [
                 `user:${userName}`,
-                `【代筆】${userName}`,
                 `author:${userName}`,
                 `updated_by:${userName}`
             ];
@@ -467,7 +468,7 @@ class LLMDiaryGeneratorPhase53Unified {
         
         // 食べ物・飲み物
         const foodKeywords = [
-            'たい焼き', 'コーヒー', 'お茶', 'ラーメン', 'うどん', 'そば', 'カレー', 
+            'コーヒー', 'お茶', 'ラーメン', 'うどん', 'そば', 'カレー', 
             'サンドイッチ', 'パン', 'おにぎり', 'お弁当', 'ケーキ', 'アイス', 
             'ジュース', 'ビール', '料理', '食事'
         ];
@@ -482,7 +483,7 @@ class LLMDiaryGeneratorPhase53Unified {
         
         // 活動・体験
         const activityKeywords = [
-            '合宿', 'アフタヌーンティー', 'ミーティング', '会議', '打ち合わせ',
+            'ミーティング', '会議', '打ち合わせ',
             '散歩', '買い物', '映画鑑賞', '読書', '運動', 'ジョギング',
             'イベント', 'セミナー', 'ワークショップ', '研修'
         ];
@@ -547,30 +548,49 @@ class LLMDiaryGeneratorPhase53Unified {
         
         console.log(`📋 esa記事分析 (Step 2): ${posts.length}件の記事を処理中`);
         
-        // 🎯 今日の日付に関連する記事を特定
+        // 🎯 72時間以内の記事のみを対象に変更（古いデータ除外）
+        const seventyTwoHoursAgo = new Date(today.getTime() - (72 * 60 * 60 * 1000));
         const todayRelevantPosts = posts.filter(post => {
             if (!post.updated_at && !post.created_at) return false;
             
             const postDate = new Date(post.updated_at || post.created_at);
-            const postDateStr = postDate.toISOString().split('T')[0];
             
-            // 今日または昨日の記事を対象
-            const yesterday = new Date(today);
-            yesterday.setDate(yesterday.getDate() - 1);
-            const yesterdayStr = yesterday.toISOString().split('T')[0];
-            
-            return postDateStr === todayStr || postDateStr === yesterdayStr;
+            // 72時間以内の記事のみを対象
+            return postDate >= seventyTwoHoursAgo;
         });
         
-        console.log(`🎯 今日関連記事: ${todayRelevantPosts.length}件 (今日: ${todayStr})`);
+        console.log(`🎯 72時間以内記事: ${todayRelevantPosts.length}件 (古いデータ除外)`);
         
         // 🔍 記事タイトルからキーワード抽出
         const extractedKeywords = new Set();
         const recentTopics = new Set();
         const recentActivities = new Set();
         
-        // すべての記事（最近の記事を優先）から情報抽出
-        const analysisTargets = [...todayRelevantPosts, ...posts.slice(0, 5)];
+        // 代筆記事を除外した最近の記事のみから情報抽出
+        const filteredPosts = posts.filter(post => {
+            // 代筆記事を除外
+            if (post.name && (post.name.includes('【代筆】') || post.name.includes('代筆'))) {
+                return false;
+            }
+            if (post.category && post.category.includes('AI代筆日記')) {
+                return false;
+            }
+            if (post.created_by === 'esa_bot') {
+                return false;
+            }
+            return true;
+        });
+        
+        // 72時間以内の記事のみを対象にする（統一）
+        const recentFilteredPosts = filteredPosts.filter(post => {
+            if (!post.updated_at && !post.created_at) return false;
+            const postDate = new Date(post.updated_at || post.created_at);
+            return postDate >= seventyTwoHoursAgo;
+        });
+        
+        const analysisTargets = [...todayRelevantPosts.filter(post => 
+            !(post.name && (post.name.includes('【代筆】') || post.name.includes('代筆')))
+        ), ...recentFilteredPosts.slice(0, 5)];
         
         analysisTargets.forEach(post => {
             if (post.name) {
@@ -645,8 +665,8 @@ class LLMDiaryGeneratorPhase53Unified {
         // 日常・業務パターン
         const dailyPatterns = [
             /評価面談/g, /要求/g, /確認/g, /チョットチガッテイタ/g,
-            /仕切り直し/g, /スクフェス/g, /イベント/g,
-            /福井本社/g, /お客さん/g, /知り合い/g, /楽しみ/g
+            /仕切り直し/g,
+            /本社/g, /顧客対応/g, /知り合い/g, /楽しみ/g
         ];
         
         // 特定のフレーズパターン
@@ -677,18 +697,14 @@ class LLMDiaryGeneratorPhase53Unified {
     inferActivitiesFromBody(bodyMd) {
         const activities = [];
         
+        // 🚨 固定活動テンプレート削除 - 完全動的抽出のみ使用
+        // 古い固定マッピングを削除し、リアルタイムデータのみに依存
         const activityMapping = {
-            '評価面談': '評価面談の完了',
-            '要求の確認': '要求理解・調整作業',
-            'Claude Code': 'Claude Code の利用検証・コスト確認',
-            'ccusage': 'トークン使用量分析',
-            'メンタルモデル': 'チーム内概念共有の重要性確認',
-            'スクフェス': 'スクフェス関連イベント・ネットワーキング',
-            '福井本社': '福井本社への訪問予定',
-            'お客さん': '顧客との関係構築・交流',
-            '仕切り直し': '計画の見直し・再調整',
+            // 一般的な学習活動のみ保持（具体的な固有名詞は削除）
             'TIL': '学習・気づきの整理',
-            '楽しみ': '将来への期待・前向きな計画'
+            '学習': '学習活動',
+            '勉強': '学習活動'
+            // 'スクフェス', 'ハッカソン', '一斉会議'等の固定パターンは完全削除
         };
         
         Object.entries(activityMapping).forEach(([keyword, activity]) => {
@@ -711,8 +727,7 @@ class LLMDiaryGeneratorPhase53Unified {
             'Claude Code': 'AI・開発ツール',
             'メンタルモデル': 'チーム・概念共有',
             'リカバリ': '問題解決・復旧',
-            'スクフェス': 'エンターテイメント・ネットワーキング',
-            '福井本社': '拠点間連携・出張',
+            '本社': '拠点間連携・本社業務',
             'トークン': 'API・コスト管理',
             '大丈夫なのかなあ': '不安・検証の必要性',
             '楽しみ': '期待・前向きな気持ち',
@@ -748,8 +763,8 @@ class LLMDiaryGeneratorPhase53Unified {
         const dailyPatterns = [
             /評価面談/g, /面談/g, /会議/g, /ミーティング/g,
             /腰/g, /峠/g, /体調/g, /健康/g, /調子/g,
-            /スクフェス/g, /ゲーム/g, /趣味/g, /イベント/g,
-            /福井/g, /本社/g, /出張/g, /移動/g, /お客さん/g,
+            /趣味/g,
+            /本社/g, /出張/g, /移動/g, /顧客対応/g,
             /要求/g, /確認/g, /レビュー/g, /相談/g, /仕切り直し/g,
             /チーム/g, /共有/g, /リカバリ/g, /再検討/g,
             /知り合い/g, /関連/g, /楽しみ/g
@@ -795,29 +810,15 @@ class LLMDiaryGeneratorPhase53Unified {
     inferActivitiesFromTitle(title) {
         const activities = [];
         
-        // 🆕 Step 2: より詳細な活動マッピング
+        // 🚨 固定活動テンプレート削除 - 完全動的抽出のみ使用
+        // 古い固定マッピングを削除し、リアルタイムデータのみに依存
         const activityMapping = {
+            // 一般的な業務活動のみ保持（具体的な固有名詞は削除）
             '評価面談': '評価面談の実施・完了',
             '面談': 'チーム面談',
-            '要求': '要求事項の確認・見直し作業',
-            '確認': '各種確認・レビュー作業', 
-            'Claude Code': 'Claude Code の検討・利用検証',
-            'スクフェス': 'スクールアイドルフェスティバル関連活動',
-            '腰': '体調管理・健康状態の確認',
-            '峠': '課題・困難の克服',
-            '福井': '福井本社での業務・訪問',
-            '本社': '本社業務・拠点間連携',
-            'お客さん': '顧客対応・関係構築',
             '開発': 'システム開発作業',
-            '実装': '機能実装作業',
-            'AI': 'AI技術の活用・研究',
-            'システム': 'システム関連作業',
-            'チーム': 'チーム活動・連携業務',
-            'メンタルモデル': 'チーム内概念共有・議論',
-            'Done': 'タスク完了・成果達成',
-            '完成': 'プロジェクト・作品完成',
-            '仕切り直し': '計画見直し・再スタート',
-            'イベント': 'イベント参加・関連活動'
+            'システム': 'システム関連作業'
+            // 'スクフェス', 'イベント'等の固定パターンは完全削除
         };
         
         Object.entries(activityMapping).forEach(([keyword, activity]) => {
@@ -853,12 +854,11 @@ class LLMDiaryGeneratorPhase53Unified {
             '要求': '要求分析・確認',
             'Claude': 'AI・Claude活用',
             'Code': 'プログラミング・開発ツール',
-            'スクフェス': 'ゲーム・エンターテイメント',
             '腰': '健康管理・体調',
             '峠': '課題解決・克服',
-            '福井': '地域・拠点間連携',
+            '地域': '地域・拠点間連携',
             '本社': '本社業務・組織運営',
-            'お客さん': '顧客関係・ビジネス',
+            '顧客関係': '顧客関係・ビジネス',
             'チーム': 'チームワーク・協力',
             'メンタルモデル': 'チーム内概念・共通理解',
             'リカバリ': '問題解決・復旧',
@@ -986,11 +986,11 @@ class LLMDiaryGeneratorPhase53Unified {
 1. 機械的な表現は絶対に避ける（「取り組みました」「活発な議論を行いました」等の固定表現禁止）
 2. 人間らしい口語表現を多用する（「ちょっと手間取った」「なんとかうまくいった感じ」等）
 3. 🆕 esa記事の関心事とSlack特徴語を同等に重視して使用（50:50バランス）
-4. 具体的な体験を詳しく描写する（「評価面談があった」「Claude Codeを検討した」「腰の調子が気になった」等）
+4. 具体的な体験を詳しく描写する（「評価面談があった」「Claude Codeを検討した」「システム開発が進んだ」等）
 5. 感情表現を豊かに（驚き、満足感、ちょっとした困惑等）
 
 【文体例】
-良い例: "今日は評価面談があって、ちょっと緊張したけどなんとか終わった。あとClaude Codeの話も出てきて、なかなか興味深い感じ。腰の調子もちょっと気になってたけど、福井本社の件でバタバタしてたからかな。"
+良い例: "今日は評価面談があって、ちょっと緊張したけどなんとか終わった。あとClaude Codeの話も出てきて、なかなか興味深い感じ。いろいろと新しい発見があって充実した一日だった。"
 悪い例: "本日は評価面談を実施しました。Claude Codeについて検討しました。"
 
 【構成】
@@ -1895,14 +1895,13 @@ class LLMDiaryGeneratorPhase53Unified {
     translateTopicToInterest(topic) {
         const topicTranslations = {
             'ミーティング': 'ミーティング・会議',
-            'ハッカソン': 'ハッカソン・イベント', 
+ 
             'AI開発': 'AI・機械学習',
             'esa活動': 'ドキュメント作成',
             'ChatGPT': 'AI・機械学習',
             'テスト': 'システム開発',
             '複数チャンネル対応': 'システム統合',
             'システム最適化': 'システム開発',
-            'ハッカソン準備': 'ハッカソン・イベント',
             '技術学習': '技術学習',
             'AI': 'AI・機械学習',
             '機械学習': 'AI・機械学習',
@@ -1927,7 +1926,7 @@ class LLMDiaryGeneratorPhase53Unified {
         
         // 技術的なキーワードを含む場合の処理
         if (topic.includes('AI') || topic.includes('人工知能')) return 'AI・機械学習';
-        if (topic.includes('ハッカソン') || topic.includes('hackathon')) return 'ハッカソン・イベント';
+        // 固定パターン削除: 動的分類のみ使用
         if (topic.includes('会議') || topic.includes('meeting')) return 'ミーティング・会議';
         if (topic.includes('開発') || topic.includes('システム')) return 'システム開発';
         if (topic.includes('学習') || topic.includes('勉強')) return '技術学習';
@@ -1953,8 +1952,6 @@ class LLMDiaryGeneratorPhase53Unified {
             'express': 'プログラミング',
             'postgresql': 'データベース',
             'mongodb': 'データベース',
-            'hackathon': 'ハッカソン・イベント',
-            'ハッカソン': 'ハッカソン・イベント',
             '会議': 'ミーティング・会議',
             'meeting': 'ミーティング・会議',
             'ミーティング': 'ミーティング・会議',
@@ -1973,7 +1970,7 @@ class LLMDiaryGeneratorPhase53Unified {
     translateActivityToInterest(activity) {
         if (activity.includes('AI') || activity.includes('人工知能')) return 'AI・機械学習';
         if (activity.includes('会議') || activity.includes('案内')) return 'ミーティング・会議';
-        if (activity.includes('ハッカソン') || activity.includes('参加')) return 'ハッカソン・イベント';
+        // 固定活動パターン削除: 動的分類のみ使用
         if (activity.includes('開発') || activity.includes('システム')) return 'システム開発';
         if (activity.includes('MCP') || activity.includes('統合')) return 'システム統合';
         if (activity.includes('Slack') || activity.includes('コミュニケーション')) return 'チーム協力';
@@ -2233,7 +2230,7 @@ class LLMDiaryGeneratorPhase53Unified {
         
         // 食べ物・飲み物
         const foodKeywords = [
-            'たい焼き', 'コーヒー', 'お茶', 'ラーメン', 'うどん', 'そば', 'カレー', 
+            'コーヒー', 'お茶', 'ラーメン', 'うどん', 'そば', 'カレー', 
             'サンドイッチ', 'パン', 'おにぎり', 'お弁当', 'ケーキ', 'アイス', 
             'ジュース', 'ビール', '料理', '食事'
         ];
@@ -2248,7 +2245,7 @@ class LLMDiaryGeneratorPhase53Unified {
         
         // 活動・体験
         const activityKeywords = [
-            '合宿', 'アフタヌーンティー', 'ミーティング', '会議', '打ち合わせ',
+            'ミーティング', '会議', '打ち合わせ',
             '散歩', '買い物', '映画鑑賞', '読書', '運動', 'ジョギング',
             'イベント', 'セミナー', 'ワークショップ', '研修'
         ];

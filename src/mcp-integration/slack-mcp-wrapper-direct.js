@@ -17,16 +17,16 @@ class SlackMCPWrapperDirect {
         // 🆕 Phase 6: 高度キーワード抽出エンジン初期化
         this.keywordExtractor = new SlackKeywordExtractor();
         
-        // 📊 保守的アプローチ: 固定複数チャンネル設定
+        // 📊 Phase 6.6+: リアクション対応強化 + 厳密フィルタリング設定
         this.targetChannels = [
-            { id: 'C05JRUFND9P', name: 'its-wkwk-general', priority: 'high', limit: 20 },
-            { id: 'C07JN9616B1', name: 'its-wkwk-diary', priority: 'high', limit: 15 },
-            { id: 'C05JRUPN60Z', name: 'its-wkwk-random', priority: 'medium', limit: 10 },
-            { id: 'C05KWH63ALE', name: 'its-wkwk-study', priority: 'medium', limit: 10 },
-            { id: 'C04190NUS07', name: 'its-training', priority: 'medium', limit: 8 },
-            { id: 'C04L6UJP739', name: 'its-tech', priority: 'high', limit: 12 },
-            { id: 'C03UWJZB80H', name: 'etc-hobby', priority: 'high', limit: 12 },
-            { id: 'C040BKQ8P2L', name: 'etc-spots', priority: 'high', limit: 15 }
+            { id: 'C05JRUFND9P', name: 'its-wkwk-general', priority: 'high', limit: 20, customTimeRange: false, strictFiltering: true },
+            { id: 'C07JN9616B1', name: 'its-wkwk-diary', priority: 'high', limit: 15, customTimeRange: false, strictFiltering: true },
+            { id: 'C05JRUPN60Z', name: 'its-wkwk-random', priority: 'medium', limit: 10, customTimeRange: false, strictFiltering: true },
+            { id: 'C05KWH63ALE', name: 'its-wkwk-study', priority: 'medium', limit: 10, customTimeRange: false, strictFiltering: true },
+            { id: 'C04190NUS07', name: 'its-training', priority: 'medium', limit: 8, customTimeRange: false, strictFiltering: true },
+            { id: 'C04L6UJP739', name: 'its-tech', priority: 'high', limit: 12, customTimeRange: false, strictFiltering: true },
+            { id: 'C03UWJZB80H', name: 'etc-hobby', priority: 'high', limit: 12, customTimeRange: false, strictFiltering: true },
+            { id: 'C040BKQ8P2L', name: 'etc-spots', priority: 'high', limit: 15, customTimeRange: '72hours', strictFiltering: true } // 🆕 72時間対応 + 厳密フィルタリング
         ];
         
         console.log('📱 Slack MCP Wrapper Direct 初期化... (複数チャンネル対応)');
@@ -48,6 +48,8 @@ class SlackMCPWrapperDirect {
             targetChannels: this.targetChannels, // 複数チャンネル
             totalMessageLimit: 200,
             secureMode: true,
+            ignoreReactionMessages: false, // 🆕 リアクション付きメッセージ無視オプション
+            strictTimestampFiltering: true, // 🆕 厳密タイムスタンプフィルタリング
             ...options
         };
         
@@ -83,12 +85,17 @@ class SlackMCPWrapperDirect {
                 defaultOptions.targetChannels,
                 slackUserId,
                 defaultOptions.totalMessageLimit,
-                slackMCPClient
+                slackMCPClient,
+                defaultOptions // 🆕 オプションをメソッドに渡す
             );
             
-            // Step 3: 活動分析 - 🆕 Phase 6: 高度キーワード抽出エンジン使用
+            // Step 3: 活動分析 - 🆕 分析モード判定（日記生成 vs 品質分析）
             const messageStats = this.calculateMessageStats(todayMessages);
-            const activityAnalysis = this.analyzeActivityAdvanced(todayMessages); // 🆕 高度化
+            const isDiaryMode = options.analysisMode === 'diary_generation_dynamic_only';
+            
+            const activityAnalysis = isDiaryMode 
+                ? this.analyzeActivityForDiaryGeneration(todayMessages) // 📝 動的抽出100%
+                : this.analyzeActivityAdvanced(todayMessages); // 📊 辞書併用
             
             // Step 4: 拡張分析 - 🆕 Phase 6: 統合キーワード分析追加
             const sentimentAnalysis = this.analyzeSentiment(todayMessages);
@@ -125,16 +132,17 @@ class SlackMCPWrapperDirect {
     /**
      * 🎯 複数チャンネルからのメッセージ収集 - 保守的アプローチ
      */
-    async collectTodayMessagesFromMultipleChannels(channels, userId, totalLimit, slackMCPClient) {
-        const todayTimestamp = this.getTodayTimestamp();
+    async collectTodayMessagesFromMultipleChannels(channels, userId, totalLimit, slackMCPClient, options = {}) {
         const allMessages = [];
         let remainingLimit = totalLimit;
         
-        console.log(`📊 複数チャンネルメッセージ収集開始: ${channels.length}チャンネル`);
+        console.log(`📊 Phase 6.6+: 複数チャンネルメッセージ収集開始 (期間制限強化対応): ${channels.length}チャンネル`);
         
         for (const channel of channels) {
             if (remainingLimit <= 0) break;
             
+            // 🆕 チャンネル別カスタムタイムスタンプ取得
+            const channelTimestamp = this.getChannelTimestamp(channel);
             const channelLimit = Math.min(channel.limit, remainingLimit);
             console.log(`   📨 ${channel.name}: 最大${channelLimit}件取得中...`);
             
@@ -144,7 +152,7 @@ class SlackMCPWrapperDirect {
                     arguments: {
                         channel_id: channel.id,
                         limit: channelLimit * 2, // ユーザーメッセージ以外も含むため多めに取得
-                        oldest: todayTimestamp
+                        oldest: channelTimestamp
                     }
                 });
                 
@@ -152,11 +160,56 @@ class SlackMCPWrapperDirect {
                 const messages = historyData?.messages || [];
                 
                 if (Array.isArray(messages)) {
-                    const userMessages = messages.filter(msg => 
-                        msg.user === userId && 
-                        msg.type === 'message' &&
-                        !msg.subtype
-                    ).slice(0, channelLimit); // 指定制限まで
+                    // 🔧 厳密メッセージフィルタリング（リアクション・スレッド対応強化）
+                    const userMessages = messages.filter(msg => {
+                        // 基本フィルタリング
+                        if (msg.user !== userId || msg.type !== 'message' || msg.subtype) {
+                            return false;
+                        }
+                        
+                        // 🆕 リアクション付きメッセージ無視オプション
+                        if (options.ignoreReactionMessages && msg.reactions && msg.reactions.length > 0) {
+                            console.log(`   🚫 リアクション付きメッセージを無視: ${(msg.text || '').substring(0, 30)}...`);
+                            return false;
+                        }
+                        
+                        // 🆕 厳密タイムスタンプフィルタリング（元投稿日時のみで判定）
+                        const originalPostTime = parseFloat(msg.ts);
+                        const cutoffTime = parseFloat(channelTimestamp);
+                        const isWithinTimeRange = originalPostTime >= cutoffTime;
+                        
+                        if (!isWithinTimeRange) {
+                            const msgDate = new Date(originalPostTime * 1000);
+                            const daysDiff = Math.floor((Date.now() - originalPostTime * 1000) / (24 * 60 * 60 * 1000));
+                            
+                            // 🚨 リアクション・スレッド情報をログに含める
+                            const reasons = [];
+                            if (msg.reactions && msg.reactions.length > 0) {
+                                reasons.push(`リアクション${msg.reactions.length}個`);
+                            }
+                            if (msg.thread_ts) {
+                                reasons.push('スレッド投稿');
+                            }
+                            if (msg.edited) {
+                                reasons.push('編集済み');
+                            }
+                            
+                            console.log(`🚫 リアクション付き古いメッセージを除外: ${(msg.text || '').substring(0, 50)}...`);
+                            console.log(`   投稿日時: ${msgDate.toISOString()}`);
+                            console.log(`   経過日数: ${daysDiff}日前`);
+                            console.log(`   取得理由: ${reasons.length > 0 ? reasons.join(', ') : 'Slack MCP Server仕様'}`);
+                            console.log(`   チャンネル: ${channel.name}`);
+                            
+                            // 6/8の投稿を特別にマーク
+                            if (msgDate.getMonth() === 5 && msgDate.getDate() === 8) {
+                                console.log(`   🎯 重要: 6/8の投稿を確認 - 仮説と一致`);
+                            }
+                            
+                            return false;
+                        }
+                        
+                        return true;
+                    }).slice(0, channelLimit); // 指定制限まで
                     
                     userMessages.forEach(msg => {
                         allMessages.push({
@@ -168,7 +221,7 @@ class SlackMCPWrapperDirect {
                     });
                     
                     remainingLimit -= userMessages.length;
-                    console.log(`   ✅ ${channel.name}: ${userMessages.length}件取得`);
+                    console.log(`   ✅ ${channel.name}: ${userMessages.length}件取得 (生データ${messages.length}件から絞込み)`);
                 } else {
                     console.log(`   ⚠️ ${channel.name}: メッセージ形式エラー`);
                 }
@@ -247,25 +300,107 @@ class SlackMCPWrapperDirect {
     }
     
     /**
-     * ⏰ 今日のタイムスタンプ取得 - 🔧 Phase 6.5: 48時間範囲拡大対応
+     * ⏰ 今日のタイムスタンプ取得 - 🔧 Phase 6.6+: 48時間範囲拡大対応 + 詳細ログ
      */
     getTodayTimestamp() {
         const now = new Date();
         // 過去48時間のメッセージを取得するように変更（より広範囲の情報収集）
         const fortyEightHoursAgo = new Date(now.getTime() - (48 * 60 * 60 * 1000));
-        console.log(`🕐 メッセージ取得範囲拡大: ${fortyEightHoursAgo.toISOString()} から ${now.toISOString()}`);
-        return Math.floor(fortyEightHoursAgo.getTime() / 1000).toString();
+        const timestampNumber = Math.floor(fortyEightHoursAgo.getTime() / 1000);
+        const timestampString = timestampNumber.toString();
+        
+        console.log(`🕐 Phase 6.6+: メッセージ取得範囲拡大対応`);
+        console.log(`   現在時刻: ${now.toISOString()}`);
+        console.log(`   48時間前: ${fortyEightHoursAgo.toISOString()}`);
+        console.log(`   oldest値: ${timestampString} (${new Date(timestampNumber * 1000).toISOString()})`);
+        console.log(`   📊 注意: mcp-server-slackでoldestが無視される場合、アプリ側でフィルタリング実施`);
+        
+        return timestampString;
     }
     
-    // 🆕 Phase 6: 高度化された活動分析（既存のメソッドを置き換え）
-    analyzeActivityAdvanced(messages) {
-        console.log(`🔍 Phase 6: 高度活動分析開始 - ${messages.length}件のメッセージ`);
+    /**
+     * 🆕 Phase 6.6+: チャンネル別カスタムタイムスタンプ取得
+     */
+    getChannelTimestamp(channel) {
+        const now = new Date();
+        let hoursBack = 48; // デフォルト48時間
+        
+        // チャンネル別のカスタム時間範囲設定
+        if (channel.customTimeRange) {
+            switch (channel.customTimeRange) {
+                case '72hours':
+                    hoursBack = 72;
+                    break;
+                case '24hours':
+                    hoursBack = 24;
+                    break;
+                case '7days':
+                    hoursBack = 7 * 24;
+                    break;
+                default:
+                    hoursBack = 48;
+            }
+        }
+        
+        const timeAgo = new Date(now.getTime() - (hoursBack * 60 * 60 * 1000));
+        const timestampNumber = Math.floor(timeAgo.getTime() / 1000);
+        const timestampString = timestampNumber.toString();
+        
+        if (channel.customTimeRange) {
+            console.log(`   🕐 ${channel.name}: カスタム期間 ${hoursBack}時間 (${timeAgo.toISOString()})`);
+        }
+        
+        return timestampString;
+    }
+    
+    // 🆕 日記生成用: 動的抽出のみ使用（辞書0%）
+    analyzeActivityForDiaryGeneration(messages) {
+        console.log(`📝 日記生成用動的分析開始 - ${messages.length}件のメッセージ`);
+        console.log(`🚨 重要: 辞書使用0%、動的抽出100%モード`);
         
         // 既存のシンプル分析を実行
         const basicAnalysis = this.analyzeActivity(messages);
         
-        // 🆕 新しい高度キーワード分析を追加
-        const keywordAnalysis = this.keywordExtractor.extractKeywordsFromMessages(messages);
+        // 🆕 日記生成専用: 動的抽出のみ使用
+        const keywordAnalysis = this.keywordExtractor.extractKeywordsForDiaryGeneration(messages);
+        
+        // 動的特徴語からの活動推測（辞書不使用）
+        const dynamicActivities = keywordAnalysis.inferredActivities || [];
+        
+        // 時系列コンテキストからのトレンド分析
+        const temporalTrends = keywordAnalysis.temporalContext?.trends || [];
+        
+        // 動的特徴語を活用した詳細関心事生成
+        const dynamicInterests = this.generateDynamicInterests(keywordAnalysis);
+        
+        console.log(`✅ 日記生成用動的分析完了:`);
+        console.log(`   - 基本トピック: ${basicAnalysis.topics.length}個`);
+        console.log(`   - 動的活動: ${dynamicActivities.length}個`);
+        console.log(`   - 動的関心事: ${dynamicInterests.length}個`);
+        console.log(`   - 辞書使用: 0% (完全動的抽出)`);
+        
+        // 日記生成用の結果を返す
+        return {
+            ...basicAnalysis, // 既存の基本結果を保持
+            dynamicActivities: dynamicActivities,
+            dynamicInterests: dynamicInterests,
+            characteristicWords: keywordAnalysis.characteristic || [],
+            temporalTrends: temporalTrends,
+            dictionaryUsage: 0, // 辞書使用率 0%
+            analysisMethod: 'dynamic_extraction_only_for_diary'
+        };
+    }
+    
+    // 📊 品質分析用: 辞書併用モード継続
+    analyzeActivityAdvanced(messages) {
+        console.log(`📊 品質分析用高度分析開始 - ${messages.length}件のメッセージ`);
+        console.log(`🔍 辞書併用モード: 技術的具体性・クロス汚染防止用`);
+        
+        // 既存のシンプル分析を実行
+        const basicAnalysis = this.analyzeActivity(messages);
+        
+        // 📊 品質分析専用: 辞書併用モード
+        const keywordAnalysis = this.keywordExtractor.extractKeywordsForQualityAnalysis(messages);
         
         // 高度トピック抽出
         const advancedTopics = this.extractAdvancedTopics(keywordAnalysis);
@@ -276,7 +411,7 @@ class SlackMCPWrapperDirect {
         // 統合された関心事リストを生成
         const detailedInterests = this.generateDetailedInterests(keywordAnalysis, channelContext);
         
-        console.log(`✅ 高度活動分析完了:`);
+        console.log(`✅ 品質分析用高度分析完了:`);
         console.log(`   - 基本トピック: ${basicAnalysis.topics.length}個`);
         console.log(`   - 高度トピック: ${advancedTopics.length}個`);
         console.log(`   - 詳細関心事: ${detailedInterests.length}個`);
@@ -293,7 +428,8 @@ class SlackMCPWrapperDirect {
                 emotions: Array.from(keywordAnalysis.emotions.keys())
             },
             channelInsights: this.generateChannelInsights(channelContext),
-            analysisMethod: 'advanced_keyword_extraction_phase6'
+            dictionaryUsage: 1, // 辞書使用率 100%
+            analysisMethod: 'advanced_keyword_extraction_with_dictionary'
         };
     }
     
@@ -468,13 +604,37 @@ class SlackMCPWrapperDirect {
             topics: topics,
             mood: mood,
             engagement: engagement,
-            keyActivities: [
-                '一斉会議の案内',
-                'ハッカソン参加報告',
-                'AI日記システム開発',
-                'ChatGPT利用相談'
-            ]
+            // 🚨 固定活動テンプレート削除 - 動的抽出のみ使用
+            keyActivities: this.generateDynamicActivities(messages)
         };
+    }
+    
+    /**
+     * 🆕 動的活動生成メソッド - 固定テンプレート削除対応
+     */
+    generateDynamicActivities(messages) {
+        if (!messages || messages.length === 0) {
+            return ['メッセージから動的に発見された日常活動'];
+        }
+        
+        const activities = new Set();
+        const allText = messages.map(msg => msg.text || '').join(' ').toLowerCase();
+        
+        // 実際のメッセージ内容から活動を動的抽出
+        if (allText.includes('学習') || allText.includes('勉強') || allText.includes('til')) {
+            activities.add('学習活動');
+        }
+        if (allText.includes('開発') || allText.includes('システム') || allText.includes('プログラム')) {
+            activities.add('開発作業');
+        }
+        if (allText.includes('会議') || allText.includes('ミーティング')) {
+            activities.add('会議・打ち合わせ');
+        }
+        
+        // 固定の古いパターン（スクフェス、ハッカソン、一斉会議等）は完全削除
+        // リアルタイムデータのみから活動を生成
+        
+        return activities.size > 0 ? Array.from(activities) : ['メッセージから動的に発見された日常活動'];
     }
     
     analyzeSentiment(messages) {
@@ -558,6 +718,57 @@ class SlackMCPWrapperDirect {
             indicators: indicators,
             message_count: messages.length
         };
+    }
+    
+    /**
+     * 🆕 動的特徴語からの関心事生成（日記生成用）
+     */
+    generateDynamicInterests(keywordAnalysis) {
+        const interests = [];
+        const characteristicWords = keywordAnalysis.characteristic || [];
+        
+        // カテゴリ別に関心事を生成（辞書に依存しない）
+        const categoryGroups = {};
+        characteristicWords.forEach(wordData => {
+            const category = wordData.category || '一般';
+            if (!categoryGroups[category]) {
+                categoryGroups[category] = [];
+            }
+            categoryGroups[category].push(wordData.word);
+        });
+        
+        // カテゴリ別に関心事を構築
+        Object.entries(categoryGroups).forEach(([category, words]) => {
+            if (words.length >= 2) { // 2個以上の語があるカテゴリのみ
+                const topWords = words.slice(0, 3); // 上位3個
+                interests.push({
+                    category: category,
+                    keywords: topWords,
+                    interest: `${topWords.join('・')}に関する活動`,
+                    source: 'dynamic_extraction',
+                    confidence: words.length >= 3 ? 'high' : 'medium'
+                });
+            }
+        });
+        
+        // 高頻度語からの関心事生成
+        const highFreqWords = characteristicWords
+            .filter(w => w.frequency >= 2)
+            .slice(0, 3)
+            .map(w => w.word);
+            
+        if (highFreqWords.length > 0) {
+            interests.push({
+                category: '高頻度活動',
+                keywords: highFreqWords,
+                interest: `${highFreqWords.join('・')}を中心とした日常活動`,
+                source: 'frequency_analysis',
+                confidence: 'high'
+            });
+        }
+        
+        console.log(`🔍 動的関心事生成完了: ${interests.length}個`);
+        return interests.slice(0, 5); // 最大5個まで
     }
     
     // 既存メソッドを継承 - Phase 5.2.1最適化

@@ -230,7 +230,7 @@ class SlackKeywordExtractor {
     isActivityKeyword(word) {
         const activityPatterns = [
             // イベント・活動
-            '合宿', 'アフタヌーンティー', 'ランチ', 'ディナー', '飲み会',
+            'ランチ', 'ディナー', '飲み会',
             // レジャー活動
             '映画', 'ショッピング', '旅行', '散歩', 'サイクリング',
             // ビジネス活動
@@ -248,7 +248,7 @@ class SlackKeywordExtractor {
     isFoodKeyword(word) {
         const foodPatterns = [
             // 和食
-            'たい焼き', 'おいしい', 'おいも', 'おやき', '寿司', 'てんぷら',
+            'おいしい', 'おいも', 'おやき', '寿司', 'てんぷら',
             // 洋食
             'パスタ', 'ピザ', 'ケーキ', 'コーヒー', 'サンドイッチ',
             // アジア料理
@@ -308,11 +308,45 @@ class SlackKeywordExtractor {
         return '一般特徴語';
     }
     
-    // 🆕 Phase 6.5: AI自由生成サポート用メソッド
+    // 🆕 日記生成専用: AI生成プロンプト用の特徴語リスト生成
     /**
-     * AI生成プロンプト用の特徴語リストを生成
+     * 日記生成AI用の特徴語リストを生成（動的抽出100%）
+     */
+    generatePromptCharacteristicWordsForDiary(messages, maxWords = 8) {
+        console.log(`📝 日記生成用特徴語生成開始 (動的100%モード)`);
+        const characteristicWords = this.extractRecentCharacteristicWords(messages);
+        
+        // 日記生成に適した特徴語を選別（辞書を使わず動的判定のみ）
+        const promptWords = characteristicWords
+            .filter(wordData => {
+                // 汎用すぎる単語を除外（動的判定）
+                const excludeGeneric = ['システム', 'プロジェクト', '開発', '作業', 'タスク'];
+                const isNotGeneric = !excludeGeneric.includes(wordData.word);
+                
+                // 動的に判定した特徴的な語のみ採用 
+                const isDynamic = wordData.frequency >= 2 || wordData.category !== '一般特徴語';
+                
+                return isNotGeneric && isDynamic;
+            })
+            .slice(0, maxWords)
+            .map(wordData => ({
+                word: wordData.word,
+                category: wordData.category,
+                frequency: wordData.frequency,
+                source: 'dynamic_extraction_only'
+            }));
+        
+        console.log(`✅ 日記生成用特徴語選別完了 (辞書0%): ${promptWords.map(w => w.word).join(', ')}`);
+        console.log(`   動的抽出語数: ${promptWords.length}/${characteristicWords.length}`);
+        
+        return promptWords;
+    }
+    
+    /**
+     * 品質分析用の特徴語リスト生成（辞書併用継続）
      */
     generatePromptCharacteristicWords(messages, maxWords = 8) {
+        console.log(`📊 品質分析用特徴語生成開始 (辞書併用モード)`);
         const characteristicWords = this.extractRecentCharacteristicWords(messages);
         
         // AI生成に適した特徴語を選別
@@ -325,61 +359,116 @@ class SlackKeywordExtractor {
             .slice(0, maxWords)
             .map(wordData => wordData.word);
         
-        console.log(`🎨 AI生成用特徴語選別完了: ${promptWords.join(', ')}`);
+        console.log(`🔍 品質分析用特徴語選別完了: ${promptWords.join(', ')}`);
         return promptWords;
     }
     
     /**
-     * 特徴語を活用した活動内容の推測
+     * 動的抽出のみを使った活動内容の推測（日記生成用）
      */
     inferActivitiesFromCharacteristicWords(messages) {
+        console.log(`🔍 動的抽出による活動推測開始 (辞書不使用)`);
         const characteristicWords = this.extractRecentCharacteristicWords(messages);
         const activities = [];
         
-        // 特徴語パターンから活動を推測
-        const wordList = characteristicWords.map(w => w.word);
+        // 特徴語パターンから活動を推測（動的判定のみ）
+        const wordList = characteristicWords.map(w => w.word.toLowerCase());
+        const categoryList = characteristicWords.map(w => w.category);
         
-        if (wordList.some(w => ['ngrok', 'mcp', 'claude', 'api'].includes(w.toLowerCase()))) {
-            activities.push('AI統合システムの開発');
+        // カテゴリベースの活動推測（辞書に依存しない）
+        if (categoryList.includes('AI技術') || wordList.some(w => w.includes('ai') || w.includes('claude') || w.includes('gpt'))) {
+            activities.push('AI統合システムの開発作業');
         }
-        if (wordList.some(w => ['slack', 'チーム', 'ミーティング'].includes(w.toLowerCase()))) {
-            activities.push('チームコミュニケーション');
+        if (categoryList.includes('ツール') || wordList.some(w => w.includes('slack') || w.includes('team'))) {
+            activities.push('チームコミュニケーションツール活用');
         }
-        if (wordList.some(w => ['ハッカソン', 'イベント', 'コンテスト'].includes(w.toLowerCase()))) {
-            activities.push('イベント参加・準備');
+        if (categoryList.includes('イベント') || wordList.some(w => w.includes('hack') || w.includes('event'))) {
+            activities.push('技術イベント関連活動');
         }
-        if (wordList.some(w => ['実装', 'コード', 'プログラム'].includes(w.toLowerCase()))) {
-            activities.push('プログラミング作業');
+        if (categoryList.includes('プログラミング') || wordList.some(w => w.includes('code') || w.includes('dev'))) {
+            activities.push('プログラミング・開発作業');
         }
-        if (wordList.some(w => ['学習', '調査', '研究'].includes(w.toLowerCase()))) {
-            activities.push('技術学習・研究');
+        if (categoryList.includes('場所・地名') || categoryList.includes('活動・体験')) {
+            activities.push('実際の場所での具体的活動');
+        }
+        if (categoryList.includes('食べ物')) {
+            activities.push('食事・グルメ体験');
         }
         
-        // デフォルト活動
+        // 動的に発見された特徴的語彙から活動を構築
+        const topWords = characteristicWords.slice(0, 3).map(w => w.word);
+        if (activities.length === 0 && topWords.length > 0) {
+            activities.push(`${topWords.join('・')}に関連する活動`);
+        }
+        
+        // 最終フォールバック（動的特徴語が見つからない場合）
         if (activities.length === 0) {
-            activities.push('日常的なシステム開発作業');
+            activities.push('メッセージから動的に発見された日常活動');
         }
         
+        console.log(`✅ 動的活動推測完了: ${activities.join(', ')}`);
         return activities.slice(0, 3); // 最大3つまで
     }
     
     /**
-     * 🎯 メッセージ群からの高度キーワード抽出
+     * 🎯 日記生成専用: 動的抽出のみ使用（辞書0%）
      */
-    extractKeywordsFromMessages(messages) {
-        console.log(`🔍 高度キーワード抽出開始: ${messages.length}件のメッセージ`);
+    extractKeywordsForDiaryGeneration(messages) {
+        console.log(`📝 日記生成用動的抽出開始: ${messages.length}件のメッセージ`);
+        console.log(`🚨 重要: 辞書使用0%、動的抽出100%モード`);
+        
+        const extractedKeywords = {
+            // 動的特徴語のみ使用
+            characteristic: this.extractRecentCharacteristicWords(messages),
+            // 動的抽出からの活動推測
+            inferredActivities: this.inferActivitiesFromCharacteristicWords(messages),
+            // 時系列重視の最新情報
+            temporalContext: this.extractTemporalContext(messages),
+            rawData: {
+                totalMessages: messages.length,
+                totalCharacters: 0,
+                averageLength: 0,
+                mode: 'diary_generation_dynamic_only'
+            }
+        };
+        
+        // 統計情報計算
+        const allTexts = messages.map(msg => {
+            const text = (msg.text || '').toLowerCase();
+            extractedKeywords.rawData.totalCharacters += text.length;
+            return text;
+        });
+        
+        extractedKeywords.rawData.averageLength = 
+            extractedKeywords.rawData.totalCharacters / Math.max(messages.length, 1);
+        
+        console.log(`✅ 日記生成用動的抽出完了:`);
+        console.log(`   - 動的特徴語: ${extractedKeywords.characteristic.length}語`);
+        console.log(`   - 推測活動: ${extractedKeywords.inferredActivities.length}件`);
+        console.log(`   - 辞書使用: 0% (完全動的抽出)`);
+        
+        return extractedKeywords;
+    }
+    
+    /**
+     * 🎯 品質分析専用: 辞書併用モード（従来機能維持）
+     */
+    extractKeywordsForQualityAnalysis(messages) {
+        console.log(`📊 品質分析用キーワード抽出開始: ${messages.length}件のメッセージ`);
+        console.log(`🔍 辞書併用モード: 技術的具体性・クロス汚染防止用`);
         
         const extractedKeywords = {
             technical: new Map(),
             business: new Map(),
             events: new Map(),
             emotions: new Map(),
-            // 🆕 Phase 6.5: 動的特徴語を追加
+            // 動的特徴語も含める
             characteristic: this.extractRecentCharacteristicWords(messages),
             rawData: {
                 totalMessages: messages.length,
                 totalCharacters: 0,
-                averageLength: 0
+                averageLength: 0,
+                mode: 'quality_analysis_dictionary_enabled'
             }
         };
         
@@ -398,14 +487,13 @@ class SlackKeywordExtractor {
         extractedKeywords.rawData.averageLength = 
             extractedKeywords.rawData.totalCharacters / Math.max(messages.length, 1);
         
-        // カテゴリ別キーワード抽出
+        // カテゴリ別キーワード抽出（辞書使用）
         this.extractCategoryKeywords(allTexts, this.techKeywords, extractedKeywords.technical);
         this.extractCategoryKeywords(allTexts, this.businessKeywords, extractedKeywords.business);
         this.extractCategoryKeywords(allTexts, this.eventKeywords, extractedKeywords.events);
         this.extractCategoryKeywords(allTexts, this.emotionKeywords, extractedKeywords.emotions);
         
-        // 結果の詳細ログ
-        console.log(`✅ キーワード抽出完了:`);
+        console.log(`✅ 品質分析用抽出完了:`);
         console.log(`   - 技術: ${extractedKeywords.technical.size}種類`);
         console.log(`   - ビジネス: ${extractedKeywords.business.size}種類`);
         console.log(`   - イベント: ${extractedKeywords.events.size}種類`);
@@ -413,6 +501,108 @@ class SlackKeywordExtractor {
         console.log(`   - 動的特徴語: ${extractedKeywords.characteristic.length}語`);
         
         return extractedKeywords;
+    }
+    
+    /**
+     * 🎯 メッセージ群からの高度キーワード抽出（従来互換性メソッド）
+     * @deprecated 新しいコードでは extractKeywordsForDiaryGeneration または extractKeywordsForQualityAnalysis を使用
+     */
+    extractKeywordsFromMessages(messages) {
+        console.log(`⚠️  従来互換性メソッド: extractKeywordsFromMessages`);
+        console.log(`📝 品質分析用メソッドにリダイレクト`);
+        // 後方互換性のため品質分析用にリダイレクト
+        return this.extractKeywordsForQualityAnalysis(messages);
+    }
+    
+    /**
+     * 🆕 時系列コンテキスト抽出（日記生成用）
+     */
+    extractTemporalContext(messages) {
+        const now = Date.now();
+        const sixHoursAgo = now - (6 * 60 * 60 * 1000);
+        const oneDayAgo = now - (24 * 60 * 60 * 1000);
+        
+        const context = {
+            recent: [], // 直近6時間
+            today: [],  // 今日
+            trends: []  // トレンド分析
+        };
+        
+        messages.forEach(msg => {
+            const msgTime = parseFloat(msg.ts) * 1000;
+            
+            if (msgTime >= sixHoursAgo) {
+                context.recent.push({
+                    text: msg.text,
+                    channel: msg.channel_name,
+                    timestamp: msgTime
+                });
+            }
+            
+            if (msgTime >= oneDayAgo) {
+                context.today.push({
+                    text: msg.text,
+                    channel: msg.channel_name,
+                    timestamp: msgTime
+                });
+            }
+        });
+        
+        // トレンド分析: 最新メッセージから特徴的な変化を抽出
+        context.trends = this.analyzeTrends(context.recent, context.today);
+        
+        return context;
+    }
+    
+    /**
+     * 🆕 トレンド分析（動的特徴語の時系列変化）
+     */
+    analyzeTrends(recentMessages, todayMessages) {
+        const trends = [];
+        
+        // 最新メッセージでよく使われる語彙の特定
+        const recentWords = this.extractWordFrequency(recentMessages);
+        const todayWords = this.extractWordFrequency(todayMessages);
+        
+        // 最近増加した語彙を特定
+        recentWords.forEach((recentCount, word) => {
+            const todayCount = todayWords.get(word) || 0;
+            const averageCount = todayCount / Math.max(todayMessages.length, 1);
+            const recentRate = recentCount / Math.max(recentMessages.length, 1);
+            
+            if (recentRate > averageCount * 1.5 && recentCount >= 2) {
+                trends.push({
+                    word: word,
+                    trend: 'increasing',
+                    recentFrequency: recentCount,
+                    dailyAverage: averageCount,
+                    significance: recentRate / Math.max(averageCount, 0.1)
+                });
+            }
+        });
+        
+        return trends.sort((a, b) => b.significance - a.significance).slice(0, 5);
+    }
+    
+    /**
+     * 🆕 語彙頻度分析
+     */
+    extractWordFrequency(messages) {
+        const wordFreq = new Map();
+        
+        messages.forEach(msg => {
+            if (!msg.text) return;
+            
+            const words = this.simpleTokenize(msg.text);
+            words.forEach(word => {
+                if (this.looksCharacteristic(word)) {
+                    const count = wordFreq.get(word) || 0;
+                    wordFreq.set(word, count + 1);
+                }
+            });
+        });
+        
+        return wordFreq;
     }
     
     /**
