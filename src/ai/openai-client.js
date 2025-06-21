@@ -12,11 +12,11 @@ class OpenAIClient {
     console.log(`   API Key先頭: ${this.apiKey ? this.apiKey.substring(0, 10) + '...' : 'なし'}`);
     
     if (!this.apiKey || this.apiKey === 'your_openai_api_key_here') {
-      console.warn('⚠️  OpenAI API key not configured. Using fallback mode.');
-      this.fallbackMode = true;
+      const errorMsg = 'OpenAI API key not configured. フォールバック機能は完全削除されました。';
+      console.error(`❌ ${errorMsg}`);
+      throw new Error(errorMsg);
     } else {
-      this.fallbackMode = false;
-      console.log('✅ OpenAI API client initialized');
+      console.log('✅ OpenAI API client initialized (no fallback)');
     }
   }
 
@@ -243,12 +243,7 @@ ${contextData.additional_context ? `追加コンテキスト：\n${contextData.a
 
   // 既存のメソッド...
   async chatCompletion(messages, options = {}) {
-    console.log(`🤖 OpenAI API呼び出し開始 - フォールバックモード: ${this.fallbackMode}`);
-    
-    if (this.fallbackMode) {
-      console.log('🔄 フォールバックモードで応答');
-      return this.fallbackResponse(messages, options);
-    }
+    console.log('🤖 OpenAI API呼び出し開始 (フォールバック機能削除済み)');
 
     try {
       console.log('🌐 OpenAI APIに接続中...');
@@ -293,12 +288,8 @@ ${contextData.additional_context ? `追加コンテキスト：\n${contextData.a
 
     } catch (error) {
       console.error('❌ OpenAI API呼び出しエラー:', error.message);
-      console.log('🔄 エラー時フォールバックを使用');
-      return {
-        success: false,
-        error: error.message,
-        fallback: this.fallbackResponse(messages, options)
-      };
+      console.error('❌ フォールバック機能は削除されました。APIキーを確認してください。');
+      throw error; // エラーをそのまま伝播、フォールバックは不使用
     }
   }
 
@@ -424,81 +415,12 @@ ${generatedDiary}
     });
   }
 
-  // フォールバックレスポンス - 関心事反映版
-  fallbackResponse(messages, options) {
-    console.log('🔄 OpenAI API未設定のため、フォールバック応答を使用');
-    
-    const lastMessage = messages[messages.length - 1]?.content || '';
-    
-    if (lastMessage.includes('分析')) {
-      return {
-        success: true,
-        content: JSON.stringify({
-          writing_style: {
-            primary_tone: "casual",
-            characteristic_expressions: ["だね", "って感じ", "いい感じ"],
-            emotion_style: "フレンドリーで親しみやすい",
-            formality_level: 2
-          },
-          interests: {
-            main_categories: ["ソフトウェア開発", "システム設計", "技術調査"],
-            technical_keywords: ["API", "データベース", "システム設計", "プログラミング"],
-            learning_patterns: ["実装して学ぶタイプ", "新技術への積極的取り組み"]
-          },
-          behavior_patterns: {
-            typical_tasks: ["API実装", "システム改善", "技術調査", "開発作業"],
-            work_style: "技術的な深掘りを好む集中型",
-            article_structure: "具体的な実装内容中心"
-          },
-          personality_traits: {
-            communication_style: "技術的だがカジュアルで分かりやすい",
-            problem_solving_approach: "実践的・体系的",
-            team_interaction: "技術共有を重視する協力的"
-          }
-        }, null, 2),
-        fallback: true
-      };
-    } else if (lastMessage.includes('日記')) {
-      return {
-        success: true,
-        content: `タイトル: 【代筆】一般ユーザー: 開発作業で着実な進捗があった日
-
-## やることやったこと
-
-- [x] システム機能の実装作業
-- [x] API連携部分の改善
-- [x] データベース設計の見直し
-- [x] 技術仕様の検討と調査
-
-## TIL
-
-- 効率的な開発手法について新しい知見を得ることができた
-- システム間連携の仕組みについて理解が深まった
-- API設計において、拡張性と性能のバランスを取るアプローチを学んだ
-- 継続的な改善活動の重要性について再認識した
-
-## こんな気分
-
-技術的な課題に集中して取り組めた一日だった。システム改善が順調に進んで良い手応えを感じている。新しい発見もあって充実していた。明日も継続してより良いシステムを目指していきたい。`,
-        fallback: true
-      };
-    }
-    
-    return {
-      success: true,
-      content: 'フォールバック応答: API設定後に正常な応答が得られます。',
-      fallback: true
-    };
-  }
+  // フォールバック機能は完全削除されました
+  // API キーが未設定の場合、初期化時にエラーが発生します
 
   // API利用状況の確認
   async checkApiStatus() {
-    if (this.fallbackMode) {
-      return {
-        status: 'not_configured',
-        message: 'OpenAI API key not configured'
-      };
-    }
+    // フォールバックモードは削除、APIキーは必須
 
     try {
       const response = await fetch(`${this.baseURL}/models`, {
