@@ -177,8 +177,9 @@ class LLMDiaryGeneratorPhase53Unified {
             const contextData = await this.getUnifiedContextData(userName, options);
             const aiDiary = await this.generateAIDiary(userName, contextData, options);
 
+            // 🆕 AIがタイトルも生成するため、そのまま使用
             const finalDiary = {
-                title: aiDiary.title || `【代筆】${userName}: 日記`,
+                title: aiDiary.title,
                 content: aiDiary.content,
                 category: aiDiary.category || 'AI代筆日記',
                 qualityScore: aiDiary.qualityScore || 5
@@ -419,17 +420,13 @@ class LLMDiaryGeneratorPhase53Unified {
     async generateAIDiary(userName, contextData, options = {}) {
         console.log(`🤖 プロフィール分析データを活用したAI日記生成: ${userName}`);
         
-        const content = await this.generateAdvancedDiary(userName, contextData, options);
+        // 🆕 AIがタイトルと内容を同時生成
+        const aiResult = await this.generateAdvancedDiary(userName, contextData, options);
         
-        console.log(`✅ AI日記生成完了: ${content.length}文字`);
+        console.log(`✅ AI日記生成完了: ${aiResult.content.length}文字`);
+        console.log(`✅ AIタイトル生成: "${aiResult.title}"`);
         
         const today = new Date();
-        
-        // 🎯 日本語表記のタイトル生成
-        const displayName = this.getJapaneseDisplayName(userName, contextData);
-        
-        // 🎯 実際の活動内容に基づくタイトル生成
-        const contentSummary = this.generateContentSummary(contextData, userName);
         
         // 🎯 年月日フォルダ構成のカテゴリ生成
         const year = today.getFullYear();
@@ -437,8 +434,8 @@ class LLMDiaryGeneratorPhase53Unified {
         const day = String(today.getDate()).padStart(2, '0');
         
         return {
-            title: `【代筆】${displayName}: ${contentSummary}`,
-            content: content,
+            title: aiResult.title,
+            content: aiResult.content,
             category: `AI代筆日記/${year}/${month}/${day}`,
             qualityScore: 5
         };
@@ -1048,9 +1045,23 @@ ${esaContent.todayRelevantContent.length > 0 ?
 良い例: "今日は山下さんと高原さんの行脚があって、なかなか充実した一日だった。チームでリファクタリングの話も出て、やりたいことはいっぱいあるけど、POに説明するとなると途端にハードルが上がるなって実感した。"
 悪い例: "本日は業務を実施しました。チーム活動を行いました。"
 
-【構成】
-## ${today}の振り返り
+【出力形式】
+以下のJSON形式で出力してください：
 
+\`\`\`json
+{
+  "title": "【代筆】${displayName}: [その日の特徴的な活動や気分を反映した魅力的なタイトル]",
+  "content": "## ${today}の振り返り\\n\\n**やったこと**\\n[内容]\\n\\n**TIL (Today I Learned)**\\n[内容]\\n\\n**こんな気分**\\n[内容]"
+}
+\`\`\`
+
+【タイトル生成ガイドライン】
+- 具体的な活動を反映（例：「行脚と充実した一日」「1on1とチーム連携の日」「リファクタリング検討と開発業務」）
+- 感情・気分も活用（例：「充実した一日」「発見の多い日」「前進を実感した日」）
+- 25文字程度で簡潔に
+- 機械的な表現は避ける
+
+【内容構成】
 **やったこと**
 [esa記事の具体的活動（行脚、1on1、会議等）を中心に、人間らしい口語で記述]
 
@@ -1106,9 +1117,47 @@ ${esaContent.todayRelevantContent.length > 0 ?
                 throw new Error('AI生成コンテンツが不十分です');
             }
             
-            console.log(`✅ AI自由生成成功: ${aiContent.length}文字の人間らしい文章を生成`);
+            // 🆕 JSON形式のレスポンスをパース
+            let parsedResponse;
+            try {
+                // JSONブロックを抽出
+                const jsonMatch = aiContent.match(/```json\s*([\s\S]*?)\s*```/);
+                if (jsonMatch) {
+                    parsedResponse = JSON.parse(jsonMatch[1]);
+                } else {
+                    // JSONブロックがない場合、直接パースを試行
+                    parsedResponse = JSON.parse(aiContent);
+                }
+                
+                if (!parsedResponse.title || !parsedResponse.content) {
+                    throw new Error('必要なフィールドが不足');
+                }
+                
+                console.log(`✅ AI生成JSON解析成功: タイトル="${parsedResponse.title.substring(0, 30)}..."`);
+                
+            } catch (parseError) {
+                console.log(`⚠️ JSON解析失敗、フォールバック処理実行: ${parseError.message}`);
+                
+                // フォールバック: シンプルなタイトル生成
+                const displayName = await this.getJapaneseDisplayName(userName);
+                const today = new Date();
+                const dateStr = today.toLocaleDateString('ja-JP', {
+                    month: '2-digit', day: '2-digit'
+                });
+                const fallbackTitle = `【代筆】${displayName}: ${dateStr}の振り返り`;
+                
+                parsedResponse = {
+                    title: fallbackTitle,
+                    content: aiContent
+                };
+            }
             
-            return aiContent;
+            console.log(`✅ AI自由生成成功: ${parsedResponse.content.length}文字の人間らしい文章を生成`);
+            
+            return {
+                title: parsedResponse.title,
+                content: parsedResponse.content
+            };
             
         } catch (error) {
             console.error(`❌ AI自由生成エラー: ${error.message}`);
@@ -1347,40 +1396,6 @@ ${esaContent.todayRelevantContent.length > 0 ?
         return userName;
     }
     
-    // 🎯 実装: 内容に基づくタイトル要約生成
-    generateContentSummary(contextData, userName) {
-        const profileAnalysis = contextData.esaData?.profileAnalysis;
-        const hasProfileData = profileAnalysis && profileAnalysis.status === 'analyzed';
-        
-        if (hasProfileData && profileAnalysis.categories) {
-            // ユーザーの過去の投稿カテゴリに基づいた活動推測
-            const categories = profileAnalysis.categories.filter(cat => 
-                !cat.includes('AI代筆日記') && !cat.includes('Phase') && !cat.includes('MCP')
-            );
-            
-            if (categories.length > 0) {
-                const mainCategory = categories[0];
-                if (mainCategory.includes('開発') || mainCategory.includes('プログラム')) {
-                    return 'システム開発の大きな進歩';
-                } else if (mainCategory.includes('日記') || mainCategory.includes('記録')) {
-                    return '日々の活動と成長記録';
-                } else if (mainCategory.includes('学習') || mainCategory.includes('勉強')) {
-                    return '継続的な学習と発見';
-                } else if (mainCategory.includes('会議') || mainCategory.includes('打ち合わせ')) {
-                    return 'チームワークと協力の一日';
-                } else {
-                    return `${mainCategory}での着実な進展`;
-                }
-            }
-        }
-        
-        // デフォルトのタイトル（日付ベース）
-        const today = new Date();
-        const dateStr = today.toLocaleDateString('ja-JP', {
-            month: '2-digit', day: '2-digit'
-        });
-        return `${dateStr}の振り返り`;
-    }
 
     // 🆕 Step 3: 透明性向上対応の品質情報フッター（正確化版）
     generatePhase65QualityFooter(userName, contextData) {
