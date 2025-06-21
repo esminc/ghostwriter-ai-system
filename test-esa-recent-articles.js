@@ -21,7 +21,7 @@ async function testEsaRecentArticles() {
         
         // 記事内容抽出テスト
         console.log('\n=== 記事内容抽出 ===');
-        const extractedContent = await generator.extractEsaContentStep2(esaData);
+        const extractedContent = generator.extractEsaArticleContent(esaData);
         
         console.log(`✅ 抽出結果:`);
         console.log(`   - トピック: ${extractedContent.recentTopics.length}個`);

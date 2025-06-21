@@ -449,13 +449,37 @@ class LLMDiaryGeneratorPhase53Unified {
         const profileAnalysis = contextData.esaData?.profileAnalysis;
         const hasProfileData = profileAnalysis && profileAnalysis.status === 'analyzed';
 
-        // 🆕 Phase 6.5: AI自由生成を使用
-        let content = await this.generatePersonalizedDiaryContent(userName, contextData, today);
+        // 🆕 Phase 6.5: AI自由生成を使用（タイトルと内容を統合生成）
+        const aiResult = await this.generatePersonalizedDiaryContent(userName, contextData, today);
         
-        // 🆕 Phase 6.5対応の品質情報フッターを追加
-        content += this.generatePhase65QualityFooter(userName, contextData);
-
-        return content;
+        // 結果がオブジェクト（title, content）で返される場合とそうでない場合に対応
+        if (aiResult && typeof aiResult === 'object' && aiResult.title && aiResult.content) {
+            // AI統合生成の場合：タイトルと内容を別々に取得
+            let contentWithFooter = aiResult.content;
+            contentWithFooter += this.generatePhase65QualityFooter(userName, contextData);
+            
+            return {
+                title: aiResult.title,
+                content: contentWithFooter
+            };
+        } else {
+            // フォールバック生成の場合：内容のみ
+            let content = aiResult;
+            content += this.generatePhase65QualityFooter(userName, contextData);
+            
+            // タイトルを生成
+            const displayName = this.getJapaneseDisplayName(userName, contextData);
+            const today = new Date();
+            const dateStr = today.toLocaleDateString('ja-JP', {
+                month: '2-digit', day: '2-digit'
+            });
+            const fallbackTitle = `【代筆】${displayName}: ${dateStr}の振り返り`;
+            
+            return {
+                title: fallbackTitle,
+                content: content
+            };
+        }
     }
 
     // 🆕 Phase 6.5: AI自由生成機能を追加
@@ -957,6 +981,9 @@ class LLMDiaryGeneratorPhase53Unified {
     buildCreativePrompt(userName, contextData, today) {
         console.log(`🎨 AI自由生成プロンプト構築 (esa+Slack統合): ${userName}`);
         
+        // 🎯 日本語表記名の取得
+        const displayName = this.getJapaneseDisplayName(userName, contextData);
+        
         // 🆕 Step 1: esa記事内容抽出
         const esaContent = this.extractEsaArticleContent(contextData.esaData);
         
@@ -1139,7 +1166,7 @@ ${esaContent.todayRelevantContent.length > 0 ?
                 console.log(`⚠️ JSON解析失敗、フォールバック処理実行: ${parseError.message}`);
                 
                 // フォールバック: シンプルなタイトル生成
-                const displayName = await this.getJapaneseDisplayName(userName);
+                const displayName = this.getJapaneseDisplayName(userName, contextData);
                 const today = new Date();
                 const dateStr = today.toLocaleDateString('ja-JP', {
                     month: '2-digit', day: '2-digit'
