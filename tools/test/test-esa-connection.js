@@ -2,7 +2,7 @@
 
 // esa API接続テスト用スクリプト
 const dotenv = require('dotenv');
-const EsaAPI = require('./src/services/esa-api');
+const EsaAPI = require('../../src/services/esa-api');
 
 // 環境変数の読み込み
 dotenv.config();

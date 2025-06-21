@@ -1,6 +1,6 @@
 // 自動マッピング完全統合テスト
 const dotenv = require('dotenv');
-const MigrationManager = require('./src/services/migration-manager');
+const MigrationManager = require('../../src/services/migration-manager');
 
 // 環境変数の読み込み
 dotenv.config();

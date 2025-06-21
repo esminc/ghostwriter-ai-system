@@ -1,5 +1,5 @@
 // 自動ユーザーマッピングのテスト
-const AutoUserMapper = require('./src/services/auto-user-mapper');
+const AutoUserMapper = require('../../src/services/auto-user-mapper');
 const dotenv = require('dotenv');
 
 // 環境変数の読み込み

@@ -1,6 +1,6 @@
 // 自動マッピング vs 手動マッピング 比較テスト
 const dotenv = require('dotenv');
-const AutoUserMapper = require('./src/services/auto-user-mapper');
+const AutoUserMapper = require('../../src/services/auto-user-mapper');
 
 // 環境変数の読み込み
 dotenv.config();
