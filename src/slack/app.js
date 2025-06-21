@@ -352,7 +352,8 @@ class GhostWriterSlackBot {
                 mcpIntegration: mcpResult?.success || false,
                 slackDataSource: mcpResult?.metadata?.slack_data_source || 'phase_5_3_unified',
                 esaDataSource: mcpResult?.metadata?.data_sources?.esa || 'phase_5_3_unified',
-                phase53Complete: true
+                phase53Complete: true,
+                phase5Complete: true
             };
             
             // 🔍 デバッグ: previewDataの内容を確認
