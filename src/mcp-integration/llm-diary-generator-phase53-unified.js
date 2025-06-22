@@ -355,7 +355,18 @@ class LLMDiaryGeneratorPhase53Unified {
                 index === self.findIndex(p => p.number === post.number)
             );
             
-            const profileAnalysis = this.analyzeUserProfile(uniquePosts, userName);
+            // 🎯 72時間以内の記事のみを対象にプロフィール分析（フッター関心事データ統一）
+            const today = new Date();
+            const seventyTwoHoursAgo = new Date(today.getTime() - (72 * 60 * 60 * 1000));
+            const recentPosts = uniquePosts.filter(post => {
+                if (!post.created_at) return false;
+                const postDate = new Date(post.created_at);
+                return postDate >= seventyTwoHoursAgo;
+            });
+            
+            console.log(`🎯 プロフィール分析対象: ${recentPosts.length}件 (72時間以内)`);
+            
+            const profileAnalysis = this.analyzeUserProfile(recentPosts, userName);
 
             return {
                 source: 'esa_mcp_user_specific',
@@ -363,7 +374,8 @@ class LLMDiaryGeneratorPhase53Unified {
                 userName: userName,
                 postsCount: postsCount,
                 uniquePostsCount: uniquePosts.length,
-                posts: uniquePosts,
+                recentPostsCount: recentPosts.length,
+                posts: recentPosts, // 72時間以内の記事のみ返却
                 profileAnalysis: profileAnalysis,
                 queryResults: queryResults
             };
@@ -574,7 +586,7 @@ class LLMDiaryGeneratorPhase53Unified {
         const todayRelevantPosts = posts.filter(post => {
             if (!post.updated_at && !post.created_at) return false;
             
-            const postDate = new Date(post.updated_at || post.created_at);
+            const postDate = new Date(post.created_at);
             
             // 72時間以内の記事のみを対象
             return postDate >= seventyTwoHoursAgo;
@@ -586,7 +598,7 @@ class LLMDiaryGeneratorPhase53Unified {
         if (todayRelevantPosts.length > 0) {
             console.log(`📋 72時間以内記事詳細:`);
             todayRelevantPosts.slice(0, 5).forEach((post, index) => {
-                const postDate = new Date(post.updated_at || post.created_at);
+                const postDate = new Date(post.created_at);
                 const hoursAgo = Math.floor((today.getTime() - postDate.getTime()) / (60 * 60 * 1000));
                 console.log(`   ${index + 1}. "${post.name}" (${hoursAgo}時間前)`);
             });
@@ -615,7 +627,7 @@ class LLMDiaryGeneratorPhase53Unified {
         // 72時間以内の記事のみを対象にする（統一）
         const recentFilteredPosts = filteredPosts.filter(post => {
             if (!post.updated_at && !post.created_at) return false;
-            const postDate = new Date(post.updated_at || post.created_at);
+            const postDate = new Date(post.created_at);
             return postDate >= seventyTwoHoursAgo;
         });
         
@@ -1165,17 +1177,43 @@ ${esaContent.todayRelevantContent.length > 0 ?
             } catch (parseError) {
                 console.log(`⚠️ JSON解析失敗、フォールバック処理実行: ${parseError.message}`);
                 
-                // フォールバック: シンプルなタイトル生成
-                const displayName = this.getJapaneseDisplayName(userName, contextData);
-                const today = new Date();
-                const dateStr = today.toLocaleDateString('ja-JP', {
-                    month: '2-digit', day: '2-digit'
-                });
-                const fallbackTitle = `【代筆】${displayName}: ${dateStr}の振り返り`;
+                // JSON形式のクリーンアップ処理
+                let cleanContent = aiContent;
+                let extractedTitle = null;
+                try {
+                    // JSON形式が含まれている場合の抽出処理
+                    const jsonMatch = aiContent.match(/\{[\s\S]*\}/);
+                    if (jsonMatch) {
+                        const jsonData = JSON.parse(jsonMatch[0]);
+                        if (jsonData.content) {
+                            cleanContent = jsonData.content;
+                            console.log(`✅ JSON内容抽出成功: ${cleanContent.substring(0, 50)}...`);
+                        }
+                        if (jsonData.title) {
+                            extractedTitle = jsonData.title;
+                            console.log(`✅ JSONタイトル抽出成功: ${extractedTitle}`);
+                        }
+                    }
+                } catch (cleanupError) {
+                    console.log(`⚠️ JSONクリーンアップ失敗、元の内容を使用: ${cleanupError.message}`);
+                }
+                
+                // タイトル決定: 抽出されたタイトルがあればそれを使用、なければフォールバック
+                let finalTitle;
+                if (extractedTitle) {
+                    finalTitle = extractedTitle;
+                } else {
+                    const displayName = this.getJapaneseDisplayName(userName, contextData);
+                    const today = new Date();
+                    const dateStr = today.toLocaleDateString('ja-JP', {
+                        month: '2-digit', day: '2-digit'
+                    });
+                    finalTitle = `【代筆】${displayName}: ${dateStr}の振り返り`;
+                }
                 
                 parsedResponse = {
-                    title: fallbackTitle,
-                    content: aiContent
+                    title: finalTitle,
+                    content: cleanContent
                 };
             }
             
