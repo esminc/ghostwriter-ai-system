@@ -1174,6 +1174,12 @@ ${esaContent.todayRelevantContent.length > 0 ?
                 
                 console.log(`✅ AI生成JSON解析成功: タイトル="${parsedResponse.title.substring(0, 30)}..."`);
                 
+                // タイトル正規化: 【代筆】プレフィックスとDisplayNameを確実に追加
+                const displayName = this.getJapaneseDisplayName(userName, contextData);
+                const normalizedTitle = this.normalizeTitle(parsedResponse.title, displayName);
+                parsedResponse.title = normalizedTitle;
+                console.log(`✅ タイトル正規化完了: ${normalizedTitle}`);
+                
             } catch (parseError) {
                 console.log(`⚠️ JSON解析失敗、フォールバック処理実行: ${parseError.message}`);
                 
@@ -1198,12 +1204,12 @@ ${esaContent.todayRelevantContent.length > 0 ?
                     console.log(`⚠️ JSONクリーンアップ失敗、元の内容を使用: ${cleanupError.message}`);
                 }
                 
-                // タイトル決定: 抽出されたタイトルがあればそれを使用、なければフォールバック
+                // タイトル決定: 抽出されたタイトルがあればそれを正規化、なければフォールバック
+                const displayName = this.getJapaneseDisplayName(userName, contextData);
                 let finalTitle;
                 if (extractedTitle) {
-                    finalTitle = extractedTitle;
+                    finalTitle = this.normalizeTitle(extractedTitle, displayName);
                 } else {
-                    const displayName = this.getJapaneseDisplayName(userName, contextData);
                     const today = new Date();
                     const dateStr = today.toLocaleDateString('ja-JP', {
                         month: '2-digit', day: '2-digit'
@@ -2403,6 +2409,23 @@ ${esaContent.todayRelevantContent.length > 0 ?
         return allDailyKeywords.some(keyword => 
             word.includes(keyword) || keyword.includes(word)
         );
+    }
+
+    // 🎯 タイトル正規化: 【代筆】プレフィックスとDisplayNameを確実に追加
+    normalizeTitle(aiGeneratedTitle, displayName) {
+        // 既に【代筆】プレフィックスが付いている場合はそのまま返す
+        if (aiGeneratedTitle.startsWith('【代筆】')) {
+            return aiGeneratedTitle;
+        }
+        
+        // AIが生成したタイトルから【代筆】部分を除去（念のため）
+        let cleanTitle = aiGeneratedTitle.replace(/^【代筆】[^:]*:\s*/, '');
+        
+        // DisplayNameが含まれている場合は除去
+        cleanTitle = cleanTitle.replace(new RegExp(`^${displayName}:\s*`, 'g'), '');
+        
+        // 正しいフォーマットで返す
+        return `【代筆】${displayName}: ${cleanTitle}`;
     }
 }
 
