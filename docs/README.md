@@ -1,71 +1,78 @@
-# GhostWriter Documentation
+# 📁 GhostWriter Documentation Structure
 
-## 📋 ドキュメント一覧
+このディレクトリは、GhostWriterプロジェクトの全ドキュメントを整理したものです。
 
-### 要件定義・仕様書
-- **[要件定義_最終版.md](./要件定義_最終版.md)** - プロジェクトの最終的な要件定義書
-- **[要件定義.md](./要件定義.md)** - 初期の要件定義書
-- **[UI_UX要件追加.md](./UI_UX要件追加.md)** - UI/UX関連の追加要件検討
+## 📂 ディレクトリ構成
 
-### 技術仕様・実装ガイド
-- **[SQLite実装ガイド.md](./SQLite実装ガイド.md)** - SQLiteを使った基盤実装の詳細ガイド
-- **[Googleカレンダー連携技術詳細.md](./Googleカレンダー連携技術詳細.md)** - Google Calendar API連携の技術詳細
-- **[自動情報収集要件.md](./自動情報収集要件.md)** - おまかせモードでの自動情報収集仕様
-- **[データベース配置検討.md](./データベース配置検討.md)** - データベース選択肢と配置戦略
+### 📋 [`planning/`](./planning/) - 企画・計画関連
+プロジェクトの計画、仕様、戦略に関するドキュメント
 
-## 🗂️ ドキュメント構成
+- **[`phase-plans/`](./planning/phase-plans/)** - 各フェーズの実装計画書
+- **[`architecture/`](./planning/architecture/)** - システムアーキテクチャ設計
+- **[`strategies/`](./planning/strategies/)** - 技術戦略・方針
 
-```
-docs/
-├── README.md                           # このファイル
-├── 要件定義_最終版.md                   # 📋 メイン要件定義
-├── 要件定義.md                         # 📋 初期要件定義
-├── UI_UX要件追加.md                    # 🎨 UI/UX仕様
-├── SQLite実装ガイド.md                 # 🔧 実装ガイド
-├── Googleカレンダー連携技術詳細.md      # 📅 Calendar API
-├── 自動情報収集要件.md                 # 🤖 自動収集機能
-└── データベース配置検討.md             # 🗄️ DB設計
-```
+### 🔧 [`technical/`](./technical/) - 技術関連
+技術的な調査、分析、実装ガイドなど
 
-## 📝 ドキュメント更新履歴
+- **[`investigations/`](./technical/investigations/)** - 技術調査レポート
+- **[`implementation-guides/`](./technical/implementation-guides/)** - 実装ガイド・手順書
+- **[`system-analysis/`](./technical/system-analysis/)** - システム分析レポート
 
-| 日付 | 更新内容 | 更新者 |
-|------|----------|--------|
-| 2025-05-25 | ドキュメント整理、docsフォルダに移動 | システム |
-| - | 各種要件定義・技術仕様書作成 | - |
+### 📊 [`reports/`](./reports/) - レポート類
+プロジェクトの進捗、完了、分析レポート
 
-## 🚀 プロジェクト概要
+- **[`phase-reports/`](./reports/phase-reports/)** - フェーズ別進捗・完了レポート
+- **[`completion-reports/`](./reports/completion-reports/)** - 機能完了・実装完了レポート
+- **[`analysis-reports/`](./reports/analysis-reports/)** - 分析・比較レポート
 
-**代筆さん (Ghostwriter for esa Diary)** は、ESM ITSチームメンバーの日記投稿負担を軽減し、継続的な日記文化を維持するためのSlack Botです。
+### 🗂️ [`project-management/`](./project-management/) - プロジェクト管理
+開発プロセス、引き継ぎ、デプロイメント関連
 
-### 主要機能
-- 個人の文体・スタイルを学習した日記自動生成
-- Slack Botによる直感的な操作
-- Googleカレンダー・Slack履歴からの自動情報収集
-- esa記事への自動投稿
+- **[`handovers/`](./project-management/handovers/)** - 作業引き継ぎドキュメント
+- **[`commit-guides/`](./project-management/commit-guides/)** - コミット・デプロイメントガイド
+- **[`deployment/`](./project-management/deployment/)** - デプロイメント関連ドキュメント
 
-### 開発フェーズ
-- **Phase 1**: Claude Desktop + MCP Server（技術検証）
-- **Phase 2**: Slack Bot（チーム展開）
+### 📦 [`archive/`](./archive/) - アーカイブ
+過去のドキュメント、廃止された仕様など
 
-## 📖 読み順ガイド
+- **[`legacy-docs/`](./archive/legacy-docs/)** - 旧バージョンのドキュメント
+- **[`deprecated/`](./archive/deprecated/)** - 廃止された仕様・機能
+- **[`old-phases/`](./archive/old-phases/)** - 古いフェーズのドキュメント
 
-### 初めて読む場合
-1. [要件定義_最終版.md](./要件定義_最終版.md) - プロジェクト全体像
-2. [SQLite実装ガイド.md](./SQLite実装ガイド.md) - 基盤実装方法
-3. [自動情報収集要件.md](./自動情報収集要件.md) - 主要機能仕様
+## 🔍 ドキュメント検索ガイド
 
-### 技術実装する場合
-1. [SQLite実装ガイド.md](./SQLite実装ガイド.md) - データベース設計
-2. [Googleカレンダー連携技術詳細.md](./Googleカレンダー連携技術詳細.md) - API連携
-3. [データベース配置検討.md](./データベース配置検討.md) - 本格運用時の選択肢
+### よく使われるドキュメント
+
+| 目的 | ファイル場所 |
+|------|-------------|
+| **現在の計画** | `planning/phase-plans/PHASE7_IMPLEMENTATION_PLAN_2025-06-18.md` |
+| **完了レポート** | `technical/PHASE7_COMPLETION_SUMMARY_2025-06-24.md` |
+| **技術仕様** | `planning/architecture/` |
+| **最新の引き継ぎ** | `project-management/handovers/2025-06/` |
+
+### カテゴリ別検索
+
+- **📋 計画・仕様を見たい** → `planning/`
+- **🔧 技術的な詳細を知りたい** → `technical/`
+- **📊 進捗・結果を確認したい** → `reports/`
+- **🗂️ 開発プロセスを確認したい** → `project-management/`
+- **📦 過去の情報を調べたい** → `archive/`
+
+## 📝 ドキュメント作成ルール
+
+### ファイル命名規則
+- **日付形式**: `YYYY-MM-DD` (例: `2025-06-24`)
+- **大文字**: 重要なドキュメントは大文字で開始
+- **アンダースコア**: 単語区切りに使用
+
+### カテゴリ分類基準
+1. **計画・仕様** → `planning/`
+2. **技術調査・実装** → `technical/`
+3. **進捗・完了報告** → `reports/`
+4. **開発プロセス** → `project-management/`
+5. **過去資料** → `archive/`
 
 ---
 
-## 🔄 次のステップ
-
-この文書群を基に、実際の実装フェーズに移行する準備が整いました。
-
-1. **Git初期化** - プロジェクトルートでGitリポジトリ作成
-2. **Phase 1実装** - SQLiteベースのMCPサーバー開発
-3. **Phase 2準備** - Slack Bot開発環境構築
+**最終更新**: 2025-06-24  
+**管理者**: GhostWriter Development Team
