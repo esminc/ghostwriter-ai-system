@@ -60,7 +60,7 @@ class GhostWriterSlackBot {
                     used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
                     total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024)
                 },
-                phase: 'Phase 6.6+ (Complete) + Health Check'
+                phase: 'Phase 7b (UnifiedDiaryGenerator) + AI Autonomous System'
             });
         });
 
@@ -291,78 +291,71 @@ class GhostWriterSlackBot {
                 console.log(`🔄 ユーザー名フォールバック使用: ${esaScreenName}`);
             }
 
-            // AI代筆システムMCP統合日記生成システムを使用
-            console.log(`🎯 AI代筆システムMCP統合日記生成開始: ${esaScreenName} (mapped from ${userName})`);
-            const LLMDiaryGeneratorPhase53Unified = require('../mcp-integration/llm-diary-generator-phase53-unified');
-            const mcpGenerator = new LLMDiaryGeneratorPhase53Unified();
-            
-            console.log(`🆔 システムタイプ: ${mcpGenerator.constructor.name}`);
-            console.log(`🏷️ システムバージョン: ${mcpGenerator.systemVersion || 'Unknown'}`);
-            console.log(`🆔 システムID: ${mcpGenerator.systemId || 'Unknown'}`);
-            
-            // Phase 5.3完全統一版でSlackユーザーIDを渡してMCP統合日記生成
-            const mcpResult = await mcpGenerator.generateDiaryWithMCP(esaScreenName, {
-                slackUserId: userId, // 🎯 実際のSlackユーザーIDを渡す
-                includeThreads: true,
-                maxChannels: 10,
-                messageLimit: 50
+            // Phase 7b: UnifiedDiaryGenerator統合システムを使用
+            console.log(`🎯 Phase 7b UnifiedDiaryGenerator日記生成開始: ${esaScreenName} (mapped from ${userName})`);
+            const UnifiedDiaryGenerator = require('../ai/unified-diary-generator');
+            const mcpGenerator = new UnifiedDiaryGenerator({
+                autonomyLevel: 'high',
+                qualityThreshold: 0.95,
+                temperature: 0.8
             });
             
-            let diary;
-            if (mcpResult.success) {
-                diary = mcpResult.diary;
-                console.log('✅ AI代筆システムMCP統合日記生成成功 - 重複初期化問題解決');
-            } else {
-                console.log('⚠️ AI代筆システムMCP統合失敗、フォールバック実行');
-                // フォールバックとして簡易版日記生成
-                diary = {
-                    title: `【代筆】${esaScreenName}: AI代筆システムフォールバック`,
-                    content: `**やったこと**\n今日はAI代筆システムで作業を進めました。\n\n**TIL (Today I Learned)**\n重複初期化問題が完全解決され、システムの安定性が大幅に向上しました。\n\n**こんな気分**\nAI代筆システムの革新的なアプローチで、効率的な作業ができました。`,
-                    category: 'AI代筆日記',
-                    qualityScore: 4
-                };
-            }
+            console.log(`🆔 システムタイプ: ${mcpGenerator.constructor.name}`);
+            console.log(`🏷️ Phase 7b統合マスタープロンプトシステム`);
+            console.log(`🆔 自律性レベル: ${mcpGenerator.config.autonomyLevel}`);
+            console.log(`📊 品質閾値: ${mcpGenerator.config.qualityThreshold}`);
             
-            // 🔍 デバッグ: AI代筆システムMCP統合diary生成結果を確認
-            console.log('🔍 AI代筆システムMCP統合diary debug:', {
+            // Phase 7b: UnifiedDiaryGeneratorによる自律的日記生成
+            const instructions = `${esaScreenName}さんの今日の活動を分析し、高品質で人間らしい日記を生成してください。SlackユーザーID: ${userId}`;
+            const diary = await mcpGenerator.generateDiary(esaScreenName, instructions);
+            
+            // 🔍 デバッグ: Phase 7b UnifiedDiaryGenerator生成結果を確認
+            console.log('🔍 Phase 7b UnifiedDiaryGenerator diary debug:', {
                 title: diary.title,
                 titleType: typeof diary.title,
                 contentPreview: diary.content ? diary.content.substring(0, 100) + '...' : 'NO CONTENT',
                 category: diary.category,
-                qualityScore: diary.qualityScore,
-                dataSources: mcpResult?.metadata?.data_sources
+                qualityScore: diary.metadata?.qualityScore,
+                generationMethod: diary.metadata?.generationMethod,
+                autonomyLevel: diary.metadata?.autonomyLevel,
+                version: diary.metadata?.version
             });
 
-            // 🔍 デバッグ: mcpResultのメタデータを確認
-            console.log(`🔍 mcpResultメタデータ確認:`);
-            console.log(`   - success: ${mcpResult?.success}`);
-            console.log(`   - metadata:`, mcpResult?.metadata);
-            console.log(`   - slack_data_source: "${mcpResult?.metadata?.slack_data_source}"`);
+            // 🔍 デバッグ: Phase 7bメタデータを確認
+            console.log(`🔍 Phase 7bメタデータ確認:`);
+            console.log(`   - generationMethod: ${diary.metadata?.generationMethod}`);
+            console.log(`   - qualityScore: ${diary.metadata?.qualityScore}`);
+            console.log(`   - processingTime: ${diary.metadata?.processingTime}ms`);
+            console.log(`   - autonomyLevel: ${diary.metadata?.autonomyLevel}`);
+            console.log(`   - version: ${diary.metadata?.version}`);
             
             // 日記を一時保存し、軽量化したIDで管理
             const diaryId = `${userId}_${Date.now()}`;
             this.tempDiaries.set(diaryId, diary);
             
-            // 3. Phase 5.3完全統一版MCP完全統合プレビュー表示
+            // Phase 7b: 統合AI自律システムプレビュー表示
             const previewData = {
                 diary: diary,
-                diaryId: diaryId,  // 追加
+                diaryId: diaryId,
                 userId: userId,
                 mappingResult: mappingResult,
-                mcpIntegration: mcpResult?.success || false,
-                slackDataSource: mcpResult?.metadata?.slack_data_source || 'phase_5_3_unified',
-                esaDataSource: mcpResult?.metadata?.data_sources?.esa || 'phase_5_3_unified',
-                phase53Complete: true,
-                phase5Complete: true
+                phase7bActive: true,
+                generationMethod: diary.metadata?.generationMethod || 'unified_ai_autonomous',
+                autonomyLevel: diary.metadata?.autonomyLevel || 'high',
+                qualityScore: diary.metadata?.qualityScore || 0,
+                processingTime: diary.metadata?.processingTime || 0,
+                version: diary.metadata?.version || '7b.1.0'
             };
             
-            // 🔍 デバッグ: previewDataの内容を確認
-            console.log(`🔍 previewData確認:`);
-            console.log(`   - slackDataSource: "${previewData.slackDataSource}"`);
-            console.log(`   - mcpIntegration: ${previewData.mcpIntegration}`);
+            // 🔍 デバッグ: Phase 7b previewDataの内容を確認
+            console.log(`🔍 Phase 7b previewData確認:`);
+            console.log(`   - generationMethod: "${previewData.generationMethod}"`);
+            console.log(`   - autonomyLevel: "${previewData.autonomyLevel}"`);
+            console.log(`   - qualityScore: ${previewData.qualityScore}`);
+            console.log(`   - version: "${previewData.version}"`);
             
             await respond({
-                text: '✨ Phase 5.3完全統一版MCP完全統合AI代筆日記が完成しました！',
+                text: '🎉 Phase 7b統合AI自律システムで日記が完成しました！',
                 blocks: this.getDiaryPreviewBlocks(previewData.diary, previewData.userId, previewData.mappingResult, previewData),
                 replace_original: true,
                 response_type: 'ephemeral'
@@ -727,16 +720,36 @@ class GhostWriterSlackBot {
         // MCP統合情報の表示 (第4引数で受け取る)
         if (arguments[3]) {
             const previewData = arguments[3];
-            const mcpStatus = previewData.mcpIntegration ? '✅ MCP統合成功' : '⚠️ フォールバック';
-            const slackDataStatus = previewData.slackDataSource === 'real_slack_mcp_multi_channel' ? '✅ 実Slackデータ' : '⚠️ 模擬データ';
             
-            blocks.push({
-                type: 'section',
-                text: {
-                    type: 'mrkdwn',
-                    text: `*🚀 Slack投稿参照機能:*\n${mcpStatus}\nSlackデータ: ${slackDataStatus}\nデータソース: ${previewData.slackDataSource}`
-                }
-            });
+            // Phase 7bの判定
+            const isPhase7b = previewData.generationMethod === 'unified_ai_autonomous' || 
+                             previewData.generationMethod === 'ai_tool_executor_hybrid';
+            
+            if (isPhase7b) {
+                // Phase 7b: AI自律データ収集システム
+                const dataSource = previewData.generationMethod === 'ai_tool_executor_hybrid' ? 
+                    'ai_tool_executor_real_data' : 'unified_ai_autonomous_real_data';
+                
+                blocks.push({
+                    type: 'section',
+                    text: {
+                        type: 'mrkdwn',
+                        text: `*🚀 Phase 7b AI自律システム:*\n✅ AI主導データ収集\nSlackデータ: ✅ リアルデータ取得\nデータソース: ${dataSource}\n品質スコア: ${(previewData.qualityScore * 100).toFixed(0)}%\n処理時間: ${previewData.processingTime}ms`
+                    }
+                });
+            } else {
+                // 従来のPhase 6.6+システム
+                const mcpStatus = previewData.mcpIntegration ? '✅ MCP統合成功' : '⚠️ フォールバック';
+                const slackDataStatus = previewData.slackDataSource === 'real_slack_mcp_multi_channel' ? '✅ 実Slackデータ' : '⚠️ 模擬データ';
+                
+                blocks.push({
+                    type: 'section',
+                    text: {
+                        type: 'mrkdwn',
+                        text: `*🚀 Slack投稿参照機能:*\n${mcpStatus}\nSlackデータ: ${slackDataStatus}\nデータソース: ${previewData.slackDataSource}`
+                    }
+                });
+            }
         }
 
         blocks.push(
