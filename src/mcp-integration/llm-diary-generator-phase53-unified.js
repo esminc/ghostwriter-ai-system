@@ -468,7 +468,7 @@ class LLMDiaryGeneratorPhase53Unified {
         if (aiResult && typeof aiResult === 'object' && aiResult.title && aiResult.content) {
             // AI統合生成の場合：タイトルと内容を別々に取得
             let contentWithFooter = aiResult.content;
-            contentWithFooter += this.generatePhase65QualityFooter(userName, contextData);
+            contentWithFooter += await this.generatePhase65QualityFooter(userName, contextData);
             
             return {
                 title: aiResult.title,
@@ -477,7 +477,7 @@ class LLMDiaryGeneratorPhase53Unified {
         } else {
             // フォールバック生成の場合：内容のみ
             let content = aiResult;
-            content += this.generatePhase65QualityFooter(userName, contextData);
+            content += await this.generatePhase65QualityFooter(userName, contextData);
             
             // タイトルを生成
             const displayName = this.getJapaneseDisplayName(userName, contextData);
@@ -495,51 +495,6 @@ class LLMDiaryGeneratorPhase53Unified {
     }
 
     // 🆕 Phase 6.5: AI自由生成機能を追加
-    // 🆕 Phase 6.6: 日常体験キーワード判定メソッド
-    isDailyExperienceKeyword(word) {
-        // Phase 6.6で実装した日常体験キーワードカテゴリと同じ判定ロジック
-        
-        // 食べ物・飲み物
-        const foodKeywords = [
-            'コーヒー', 'お茶', 'ラーメン', 'うどん', 'そば', 'カレー', 
-            'サンドイッチ', 'パン', 'おにぎり', 'お弁当', 'ケーキ', 'アイス', 
-            'ジュース', 'ビール', '料理', '食事'
-        ];
-        
-        // 場所・地名
-        const locationKeywords = [
-            '三鷹', '新宿', '渋谷', '東京', '大阪', '名古屋', '福岡', '札幌', '仙台',
-            '北陸新幹線', '東海道新幹線', '山手線', 'JR', '地下鉄', '駅', '空港',
-            'カフェ', 'レストラン', 'ホテル', '会議室', 'オフィス', '公園', 
-            '図書館', '美術館', '映画館', '商店街', 'デパート'
-        ];
-        
-        // 活動・体験
-        const activityKeywords = [
-            'ミーティング', '会議', '打ち合わせ',
-            '散歩', '買い物', '映画鑑賞', '読書', '運動', 'ジョギング',
-            'イベント', 'セミナー', 'ワークショップ', '研修'
-        ];
-        
-        // ビジネス用語（日常的なもの）
-        const businessKeywords = [
-            'チーム運営', 'プロジェクト', 'PJ進め方', '深く議論', 'ブレスト',
-            'レビュー', 'フィードバック', 'プレゼン', '企画', '提案',
-            'スケジュール', 'タスク', '進捗'
-        ];
-        
-        const allDailyKeywords = [
-            ...foodKeywords, 
-            ...locationKeywords, 
-            ...activityKeywords, 
-            ...businessKeywords
-        ];
-        
-        // 部分一致でチェック
-        return allDailyKeywords.some(keyword => 
-            word.includes(keyword) || keyword.includes(word)
-        );
-    }
     
     /**
      * 🎨 AI自由生成による人間らしい文体復活
@@ -990,7 +945,7 @@ class LLMDiaryGeneratorPhase53Unified {
     /**
      * 🎨 AI自由生成用の創造的プロンプト構築（Step 1: esa統合版）
      */
-    buildCreativePrompt(userName, contextData, today) {
+    async buildCreativePrompt(userName, contextData, today) {
         console.log(`🎨 AI自由生成プロンプト構築 (esa+Slack統合): ${userName}`);
         
         // 🎯 日本語表記名の取得
@@ -1005,25 +960,25 @@ class LLMDiaryGeneratorPhase53Unified {
         
         if (slackData && slackData.todayMessages) {
             // 📱 Slackメッセージから動的特徴語を抽出
-            const SlackKeywordExtractor = require('./slack-keyword-extractor');
-            const extractor = new SlackKeywordExtractor();
+            const AIKeywordExtractor = require('../ai/keyword-extractor-ai');
+            const extractor = new AIKeywordExtractor(process.env.OPENAI_API_KEY);
             
             // 🆕 Phase 6.6: 日常体験キーワードを優先的に抽出
-            const allCharacteristicWords = extractor.generatePromptCharacteristicWords(slackData.todayMessages, 15);
+            const allCharacteristicWords = await extractor.generatePromptCharacteristicWords(slackData.todayMessages, 15);
             
             // 日常体験関連キーワードを最優先で選択
             const dailyExperienceWords = allCharacteristicWords.filter(word => 
-                this.isDailyExperienceKeyword(word)
+                this.isDailyExperienceKeyword(typeof word === 'object' ? word.word : word)
             );
             
             // 技術系キーワードを選択
             const technicalWords = allCharacteristicWords.filter(word => 
-                !this.isDailyExperienceKeyword(word)
+                !this.isDailyExperienceKeyword(typeof word === 'object' ? word.word : word)
             );
             
             // 🎯 Slackキーワード配置（50%重み分）
-            slackWords.push(...dailyExperienceWords.slice(0, 3)); // 日常体験を最大3個
-            slackWords.push(...technicalWords.slice(0, 2)); // 技術系を最大2個
+            slackWords.push(...dailyExperienceWords.slice(0, 3).map(w => typeof w === 'object' ? w.word : w)); // 日常体験を最大3個
+            slackWords.push(...technicalWords.slice(0, 2).map(w => typeof w === 'object' ? w.word : w)); // 技術系を最大2個
             
             console.log(`🎯 Slackキーワード選択: 日常体験${dailyExperienceWords.length}個, 技術系${technicalWords.length}個`);
         }
@@ -1128,7 +1083,7 @@ ${esaContent.todayRelevantContent.length > 0 ?
         
         try {
             // 🎨 創造的プロンプトの構築
-            const creativePrompt = this.buildCreativePrompt(userName, contextData, today);
+            const creativePrompt = await this.buildCreativePrompt(userName, contextData, today);
             
             // 🎯 OpenAI GPT-4o-mini呼び出し（創造性重視設定）
             console.log(`🎨 AI自由生成実行中（temperature: 0.8）...`);
@@ -1469,7 +1424,7 @@ ${esaContent.todayRelevantContent.length > 0 ?
     
 
     // 🆕 Step 3: 透明性向上対応の品質情報フッター（正確化版）
-    generatePhase65QualityFooter(userName, contextData) {
+    async generatePhase65QualityFooter(userName, contextData) {
         const now = new Date();
         const timestamp = now.toLocaleString('ja-JP', {
             year: 'numeric', month: '2-digit', day: '2-digit',
@@ -1496,34 +1451,34 @@ ${esaContent.todayRelevantContent.length > 0 ?
         
         if (slackData && slackData.todayMessages) {
             try {
-                const SlackKeywordExtractor = require('./slack-keyword-extractor');
-                const extractor = new SlackKeywordExtractor();
-                const allCharWords = extractor.generatePromptCharacteristicWords(slackData.todayMessages, 15);
+                const AIKeywordExtractor = require('../ai/keyword-extractor-ai');
+                const extractor = new AIKeywordExtractor(process.env.OPENAI_API_KEY);
+                const allCharWords = await extractor.generatePromptCharacteristicWords(slackData.todayMessages, 15);
                 
                 if (allCharWords.length > 0) {
                     slackKeywordsCount = allCharWords.length;
                     
                     // 🆕 Phase 6.6+: 日常体験キーワードと技術系キーワードを分離
                     const dailyExperienceWords = allCharWords.filter(word => 
-                        this.isDailyExperienceKeyword(word)
+                        this.isDailyExperienceKeyword(typeof word === 'object' ? word.word : word)
                     );
                     const technicalWords = allCharWords.filter(word => 
-                        !this.isDailyExperienceKeyword(word)
+                        !this.isDailyExperienceKeyword(typeof word === 'object' ? word.word : word)
                     );
                     
                     // 日常体験キーワード情報設定
                     if (dailyExperienceWords.length > 0) {
-                        dailyExperienceWordsInfo = dailyExperienceWords.slice(0, 8).join(', ');
+                        dailyExperienceWordsInfo = dailyExperienceWords.slice(0, 8).map(w => typeof w === 'object' ? w.word : w).join(', ');
                     }
                     
                     // 技術系キーワード情報設定
                     if (technicalWords.length > 0) {
-                        technicalWordsInfo = technicalWords.slice(0, 5).join(', ');
+                        technicalWordsInfo = technicalWords.slice(0, 5).map(w => typeof w === 'object' ? w.word : w).join(', ');
                     }
                     
                     // 全体情報（日常体験優先）
                     const prioritizedWords = [...dailyExperienceWords.slice(0, 6), ...technicalWords.slice(0, 4)];
-                    characteristicWordsInfo = prioritizedWords.join(', ');
+                    characteristicWordsInfo = prioritizedWords.map(w => typeof w === 'object' ? w.word : w).join(', ');
                 }
             } catch (error) {
                 characteristicWordsInfo = '抽出エラー';
@@ -1615,7 +1570,7 @@ ${esaContent.todayRelevantContent.length > 0 ?
                 footer += `* **反映された関心事**: ${userCategories.slice(0, Math.ceil(userCategories.length * 0.8)).join(', ')}\n`;
                 
                 // 🎯 Step 3: 実際のデータに基づく正確な反映率計算
-                const accurateReflectionRate = this.calculateAccurateReflectionRate(esaContent, slackData, profileAnalysis);
+                const accurateReflectionRate = await this.calculateAccurateReflectionRate(esaContent, slackData, profileAnalysis);
                 footer += `* **関心事反映度**: ${accurateReflectionRate.rate}% (${accurateReflectionRate.level}) - ${accurateReflectionRate.description}\n\n`;
             }
         
@@ -2120,7 +2075,7 @@ ${esaContent.todayRelevantContent.length > 0 ?
     }
     
     // 🆕 Step 3: 実際のデータに基づく正確な反映率計算
-    calculateAccurateReflectionRate(esaContent, slackData, profileAnalysis) {
+    async calculateAccurateReflectionRate(esaContent, slackData, profileAnalysis) {
         console.log('🎯 Step 3: 正確な関心事反映率計算開始');
         
         // 実際に抽出されたキーワード数を取得
@@ -2132,9 +2087,9 @@ ${esaContent.todayRelevantContent.length > 0 ?
         let slackKeywordsCount = 0;
         if (slackData && slackData.todayMessages) {
             try {
-                const SlackKeywordExtractor = require('./slack-keyword-extractor');
-                const extractor = new SlackKeywordExtractor();
-                const allCharWords = extractor.generatePromptCharacteristicWords(slackData.todayMessages, 15);
+                const AIKeywordExtractor = require('../ai/keyword-extractor-ai');
+                const extractor = new AIKeywordExtractor(process.env.OPENAI_API_KEY);
+                const allCharWords = await extractor.generatePromptCharacteristicWords(slackData.todayMessages, 15);
                 slackKeywordsCount = allCharWords.length;
             } catch (error) {
                 console.log('⚠️ Slackキーワード抽出エラー:', error.message);
@@ -2367,6 +2322,11 @@ ${esaContent.todayRelevantContent.length > 0 ?
 
     // 🆕 Phase 6.6: 日常体験キーワード判定メソッド
     isDailyExperienceKeyword(word) {
+        // undefined または null チェック
+        if (!word || typeof word !== 'string') {
+            return false;
+        }
+        
         // Phase 6.6で実装した日常体験キーワードカテゴリと同じ判定ロジック
         
         // 食べ物・飲み物

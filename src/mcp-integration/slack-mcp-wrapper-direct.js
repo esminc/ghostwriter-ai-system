@@ -5,8 +5,8 @@
 
 // 🔧 Phase 5.2.1最適化: 統合MCPマネージャー使用
 const MCPConnectionManager = require('./mcp-connection-manager');
-// 🆕 Phase 6: 高度キーワード抽出エンジン
-const SlackKeywordExtractor = require('./slack-keyword-extractor');
+// 🆕 Phase 7a: AI化キーワード抽出エンジン
+const AIKeywordExtractor = require('../ai/keyword-extractor-ai');
 
 class SlackMCPWrapperDirect {
     constructor() {
@@ -14,8 +14,8 @@ class SlackMCPWrapperDirect {
         this.mcpManager = new MCPConnectionManager();
         this.isReady = false;
         
-        // 🆕 Phase 6: 高度キーワード抽出エンジン初期化
-        this.keywordExtractor = new SlackKeywordExtractor();
+        // 🆕 Phase 7a: AI化キーワード抽出エンジン初期化
+        this.keywordExtractor = new AIKeywordExtractor(process.env.OPENAI_API_KEY);
         
         // 📊 Phase 6.6+: リアクション対応強化 + 厳密フィルタリング設定
         this.targetChannels = [
