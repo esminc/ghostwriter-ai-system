@@ -178,7 +178,7 @@ class AIToolExecutor {
                 get_users: 'ユーザー一覧取得。引数: {}'
             },
             esa: {
-                list_posts: '記事検索。引数: { "q": "user:ユーザー名", "per_page": 5 } または { "user": "ユーザー名" }',
+                list_posts: '記事検索（AI代筆除外）。引数: { "q": "user:ユーザー名 -title:【代筆】 -category:AI代筆日記", "per_page": 5 }',
                 get_post: '記事取得。引数: { "post_number": 記事番号 }',
                 create_post: '記事作成。引数: { "title": "タイトル", "body_md": "内容", "category": "カテゴリ" }',
                 get_members: 'メンバー一覧取得。引数: { "page": 1, "per_page": 100 }'
@@ -204,7 +204,18 @@ ${toolDescriptions}
 【重要：正確な引数形式】
 - slack_get_channel_history: { "channel_id": "チャンネル名", "limit": 数値 }
 - slack_get_user_profile: { "user_id": "ユーザー名" }
-- esa_list_posts: { "q": "user:ユーザー名", "per_page": 数値 }
+- esa_list_posts: { "q": "user:ユーザー名 -title:【代筆】 -category:AI代筆日記", "per_page": 数値 }
+
+【重要：創造的日記生成のための学習戦略】
+esaツール使用時の学習方針：
+- AI代筆記事を除外: "-title:【代筆】 -category:AI代筆日記" を検索に含める
+- 過去記事からは「文体パターン」「関心事の方向性」のみを学習
+- 具体的な内容をコピーせず、書き方のスタイルのみを参考にする
+
+【今日のデータを重視】
+- Slackの今日のメッセージから具体的なエピソードを発見
+- リアルタイムの発言・やりとりから新鮮な内容を抽出
+- 今日のデータを主軸に、その人らしい視点で創造的に日記を生成
 
 【AI実行指示】
 上記のツールを使って、必要なデータを自分で収集・分析し、最終的な高品質な結果を生成してください。
