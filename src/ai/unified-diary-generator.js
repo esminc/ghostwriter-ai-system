@@ -86,9 +86,13 @@ class UnifiedDiaryGenerator {
             
             console.log(`✅ UnifiedDiaryGenerator完了: 品質スコア ${validation.qualityScore}, ${this.lastExecutionStats.processingTime}ms`);
             
+            // Phase 7b品質フッタの生成
+            const qualityFooter = this.generateQualityFooter(validation, result, context);
+            const contentWithFooter = result.content + '\n\n' + qualityFooter;
+            
             return {
                 title: result.title,
-                content: result.content,
+                content: contentWithFooter,
                 category: result.category || this.generateEsaCategory(),
                 metadata: {
                     generationMethod: 'unified_ai_autonomous',
@@ -499,6 +503,71 @@ ${JSON.stringify(result, null, 2)}
         
         console.log(`⚠️ 日本語表記名が見つからないため、元の名前を使用: ${userName}`);
         return userName;
+    }
+
+    /**
+     * 📊 Phase 7b品質フッタ生成
+     */
+    generateQualityFooter(validation, result, context) {
+        const now = new Date();
+        const timestamp = now.toLocaleString('ja-JP', {
+            year: 'numeric', month: '2-digit', day: '2-digit',
+            hour: '2-digit', minute: '2-digit', second: '2-digit'
+        });
+        
+        let footer = '\n---\n\n';
+        
+        // 🤖 AI自律システム情報
+        footer += `**🤖 Phase 7b AI自律システム情報**\n`;
+        footer += `* **生成日時**: ${timestamp}\n`;
+        footer += `* **生成方式**: ${this.config.autonomyLevel === 'high' ? '完全自律' : '半自律'}AI生成 (${this.config.model})\n`;
+        footer += `* **品質スコア**: ${Math.round(validation.qualityScore * 100)}% `;
+        
+        // 品質レベルの判定
+        if (validation.qualityScore >= 0.95) {
+            footer += '⭐⭐⭐⭐⭐ (最高品質)\n';
+        } else if (validation.qualityScore >= 0.85) {
+            footer += '⭐⭐⭐⭐ (高品質)\n';
+        } else if (validation.qualityScore >= 0.75) {
+            footer += '⭐⭐⭐ (標準品質)\n';
+        } else {
+            footer += '⭐⭐ (改善余地あり)\n';
+        }
+        
+        // データソース情報
+        footer += `* **データソース**: `;
+        const toolsUsed = result.metadata?.toolsUsed || this.lastExecutionStats?.toolsUsed || 0;
+        if (toolsUsed > 0) {
+            footer += `リアルタイムMCPデータ (${toolsUsed}ツール使用)\n`;
+        } else {
+            footer += `AI知識ベース\n`;
+        }
+        
+        // 処理時間とパフォーマンス
+        const processingTime = this.lastExecutionStats?.processingTime || 0;
+        footer += `* **処理時間**: ${(processingTime / 1000).toFixed(1)}秒\n`;
+        
+        // AI自律性の指標
+        footer += `* **自律性レベル**: ${this.config.autonomyLevel} `;
+        if (this.config.autonomyLevel === 'high') {
+            footer += '(人間介入なし)\n';
+        } else if (this.config.autonomyLevel === 'medium') {
+            footer += '(ガイド付き)\n';
+        } else {
+            footer += '(制御付き)\n';
+        }
+        
+        // 改善提案（あれば）
+        if (validation.improvements && validation.improvements.length > 0) {
+            footer += `\n**💡 品質向上のヒント**:\n`;
+            validation.improvements.forEach(improvement => {
+                footer += `* ${improvement}\n`;
+            });
+        }
+        
+        footer += `\n**🚀 生成エンジン**: Phase 7b UnifiedDiaryGenerator v${this.config.version || '7b.1.0'}\n`;
+        
+        return footer;
     }
 
     /**
