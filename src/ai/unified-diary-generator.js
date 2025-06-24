@@ -45,9 +45,11 @@ class UnifiedDiaryGenerator {
     /**
      * 🎯 メインエントリーポイント: 統合日記生成
      */
-    async generateDiary(userName, instructions = "通常の日記を生成してください") {
+    async generateDiary(userName, instructions = "通常の日記を生成してください", options = {}) {
         console.log(`🤖 UnifiedDiaryGenerator起動: ${userName}`);
         console.log(`📝 指示: ${instructions}`);
+        console.log(`👤 Slack情報: realName=${options.slackRealName}, displayName=${options.slackDisplayName}`);
+        console.log(`📊 ESA情報: screenName=${options.esaUser?.screen_name}, name=${options.esaUser?.name}`);
         const startTime = Date.now();
         
         try {
@@ -60,7 +62,7 @@ class UnifiedDiaryGenerator {
             
             // Step 2: マスタープロンプト構築（統合AI自律指示）
             console.log('🎨 Step 2: 統合マスタープロンプト構築');
-            const masterPrompt = this.buildMasterPrompt(userName, context, instructions);
+            const masterPrompt = this.buildMasterPrompt(userName, context, instructions, options);
             
             // Step 3: AI自律実行（MCP動的ツール活用）
             console.log('🚀 Step 3: AI自律実行開始');
@@ -104,20 +106,24 @@ class UnifiedDiaryGenerator {
             console.log(`⚠️ UnifiedDiaryGenerator エラー: ${error.message}`);
             
             // Phase 6.6+フォールバック
-            return await this.executeEmergencyFallback(userName, instructions, error);
+            return await this.executeEmergencyFallback(userName, instructions, error, options);
         }
     }
 
     /**
      * 🎨 統合マスタープロンプト構築 - AI自律性最大化
      */
-    buildMasterPrompt(userName, context, instructions) {
+    buildMasterPrompt(userName, context, instructions, options = {}) {
         const autonomyInstructions = this.getAutonomyInstructions(this.config.autonomyLevel);
         const today = new Date().toLocaleDateString('ja-JP', {
             year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'long'
         });
         
-        return `あなたは${userName}さん専用の自律的日記生成アシスタントです。
+        // 日本語表示名の取得（Slack情報を優先、なければ固定マッピング）
+        const displayName = this.getJapaneseDisplayName(userName, options);
+        console.log(`🎯 マスタープロンプト用表示名: ${userName} -> ${displayName}`);
+        
+        return `あなたは${displayName}さん専用の自律的日記生成アシスタントです。
 
 【今回のミッション】
 ${instructions}
@@ -154,7 +160,7 @@ esa関連: ${context.tools.filter(t => t.provider === 'esa').map(t => t.name).jo
 ${autonomyInstructions}
 
 【最終成果物の要求】
-1. **タイトル**: 【代筆】${context.availableData.userProfile?.displayName || userName}: [具体的で魅力的なタイトル]
+1. **タイトル**: 【代筆】${displayName}: [具体的で魅力的なタイトル]
 2. **内容**: 必ず以下の3セクション構造で構成してください：
    
    ## ${today}の振り返り
@@ -276,39 +282,28 @@ ${masterPrompt}
                 if (!result.content) {
                     console.log('🔄 AIToolExecutorデータ収集完了、日記生成を実行');
                     
-                    // 標準的なGPT-4o-mini呼び出しで日記生成
+                    // 標準的なGPT-4o-mini呼び出しで日記生成（マスタープロンプトの要素を反映）
+                    const today = new Date().toLocaleDateString('ja-JP', {
+                        year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'long'
+                    });
+                    
                     const response = await this.openai.chat.completions.create({
                         model: this.config.model,
                         messages: [
                             {
                                 role: 'system',
-                                content: `あなたは日記生成AIです。必ず以下のJSON形式で応答してください：
-{
-  "title": "【代筆】ユーザー名: 具体的なタイトル",
-  "content": "必ず「やったこと」「TIL」「こんな気分」の3セクションを含む日記本文"
-}
-
-日記本文は以下の構造で作成してください：
-## 日付の振り返り
-
-**やったこと**
-[具体的な活動内容]
-
-**TIL (Today I Learned)**
-[学んだことや気づき]
-
-**こんな気分**
-[感情や気持ち]`
+                                content: masterPrompt  // マスタープロンプトを使用（日本語名を含む）
                             },
                             {
                                 role: 'user',
-                                content: `ユーザー: ${context.userName}
-本日: ${new Date().toLocaleDateString('ja-JP', {year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'long'})}
-
-【収集されたリアルデータ】
+                                content: `【収集されたリアルデータ】
 ${JSON.stringify(result, null, 2)}
 
-上記のリアルデータを分析して、人間らしく自然な文体で日記を生成してください。機械的表現（「実施しました」「取り組みました」等）は使わず、口語的で親しみやすい表現にしてください。`
+上記のリアルデータを基に、必ず以下のJSON形式で日記を生成してください：
+{
+  "title": "【代筆】[日本語名]: [具体的で魅力的なタイトル]",
+  "content": "必ず「やったこと」「TIL」「こんな気分」の3セクションを含む日記本文"
+}`
                             }
                         ],
                         temperature: this.config.temperature,
@@ -469,6 +464,44 @@ ${JSON.stringify(result, null, 2)}
     }
 
     /**
+     * 👤 日本語表示名取得（Phase 6互換 + Slack動的取得対応）
+     */
+    getJapaneseDisplayName(userName, options = {}) {
+        // 1. esaユーザー情報から取得（最優先：必ず日本語名が含まれる）
+        if (options.esaUser?.name) {
+            console.log(`✅ esa日本語表記名使用: ${userName} -> ${options.esaUser.name}`);
+            return options.esaUser.name;
+        }
+        
+        // 2. Slackから取得した日本語表示名をチェック
+        if (options.slackRealName || options.slackDisplayName) {
+            const slackName = options.slackDisplayName || options.slackRealName;
+            
+            // 日本語文字が含まれているかチェック
+            if (/[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(slackName)) {
+                console.log(`✅ Slack日本語表記名使用: ${userName} -> ${slackName}`);
+                return slackName;
+            }
+        }
+        
+        // 3. フォールバック: 固定マッピング（Phase 6互換）
+        const knownMappings = {
+            'okamoto-takuya': '岡本拓也',
+            'takuya.okamoto': '岡本拓也'
+        };
+        
+        const japaneseDisplayName = knownMappings[userName];
+        
+        if (japaneseDisplayName) {
+            console.log(`✅ 固定マッピング使用: ${userName} -> ${japaneseDisplayName}`);
+            return japaneseDisplayName;
+        }
+        
+        console.log(`⚠️ 日本語表記名が見つからないため、元の名前を使用: ${userName}`);
+        return userName;
+    }
+
+    /**
      * 📅 esaカテゴリ生成
      */
     generateEsaCategory() {
@@ -483,7 +516,7 @@ ${JSON.stringify(result, null, 2)}
     /**
      * 🚨 緊急フォールバック（Phase 6.6+互換）
      */
-    async executeEmergencyFallback(userName, instructions, originalError) {
+    async executeEmergencyFallback(userName, instructions, originalError, options = {}) {
         console.log('🚨 緊急フォールバック実行: Phase 6.6+システム使用');
         
         try {

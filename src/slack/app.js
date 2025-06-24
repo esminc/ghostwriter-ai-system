@@ -222,15 +222,17 @@ class GhostWriterSlackBot {
             
             let esaScreenName = userName; // 最終フォールバック
             let mappingResult = null;
+            let realName = null; // Slack実名を格納
+            let displayName = null; // Slack表示名を格納
             
             try {
                 const userInfo = await client.users.info({ user: userId });
-                const realName = userInfo.user.real_name;
+                realName = userInfo.user.real_name; // スコープ外で使用するため変数に代入
                 const rawDisplayName = userInfo.user.display_name;
                 const email = userInfo.user.profile?.email;
                 
                 // 🔧 Phase 5.1修正: 表示名フォールバック実装
-                const displayName = rawDisplayName || realName || userName || 'Unknown User';
+                displayName = rawDisplayName || realName || userName || 'Unknown User'; // スコープ外で使用するため変数に代入
                 
                 console.log(`📋 詳細ユーザー情報:`);
                 console.log(`   - Slack ID: ${userId}`);
@@ -307,7 +309,16 @@ class GhostWriterSlackBot {
             
             // Phase 7b: UnifiedDiaryGeneratorによる自律的日記生成
             const instructions = `${esaScreenName}さんの今日の活動を分析し、高品質で人間らしい日記を生成してください。SlackユーザーID: ${userId}`;
-            const diary = await mcpGenerator.generateDiary(esaScreenName, instructions);
+            
+            // Slackから取得した日本語表示名情報を含むオプションを設定
+            const options = {
+                slackUserId: userId,
+                slackRealName: realName,
+                slackDisplayName: displayName,
+                esaUser: mappingResult?.esaUser || null
+            };
+            
+            const diary = await mcpGenerator.generateDiary(esaScreenName, instructions, options);
             
             // 🔍 デバッグ: Phase 7b UnifiedDiaryGenerator生成結果を確認
             console.log('🔍 Phase 7b UnifiedDiaryGenerator diary debug:', {
